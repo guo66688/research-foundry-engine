@@ -1,0 +1,35 @@
+profiles:
+  - profile_id: "llm_systems"
+    include_terms:
+      - "large language model"
+      - "alignment"
+      - "inference"
+      - "agent"
+    exclude_terms:
+      - "survey"
+      - "workshop"
+    priority: 5
+    max_candidates: 50
+    source_scope:
+      - "arxiv"
+      - "semantic_scholar"
+    scoring_overrides:
+      topical_fit: 0.45
+      impact: 0.30
+
+  - profile_id: "multimodal_reasoning"
+    include_terms:
+      - "vision-language"
+      - "multimodal"
+      - "reasoning"
+      - "video"
+    exclude_terms:
+      - "benchmark only"
+      - "dataset release"
+    priority: 4
+    max_candidates: 40
+    source_scope:
+      - "arxiv"
+    scoring_overrides:
+      freshness: 0.25
+      method_signal: 0.20

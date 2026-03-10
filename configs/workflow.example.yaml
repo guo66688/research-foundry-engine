@@ -1,0 +1,60 @@
+workspace:
+  notes_root: "/abs/path/to/notes"
+  inbox_dir: "research/inbox"
+  dossier_dir: "research/dossiers"
+  assets_dir: "research/assets"
+
+sources:
+  arxiv:
+    enabled: true
+    categories:
+      - "cs.AI"
+      - "cs.LG"
+      - "cs.CL"
+    lookback_days: 30
+    max_results: 120
+  semantic_scholar:
+    enabled: true
+    api_key_env: "SEMANTIC_SCHOLAR_API_KEY"
+    history_window_days: 365
+    max_results: 40
+
+triage_policy:
+  shortlist_size: 12
+  score_weights:
+    topical_fit: 0.40
+    freshness: 0.20
+    impact: 0.25
+    method_signal: 0.15
+
+dossier_policy:
+  figure_mode: "source-first"
+  include_sections:
+    - "snapshot"
+    - "claims"
+    - "evidence"
+    - "questions"
+  citation_style: "inline-links"
+  summary_length: "medium"
+  max_figures: 12
+
+synthesis_policy:
+  backlinking: true
+  max_backlinks: 8
+  relation_types:
+    - "extends"
+    - "references"
+    - "shares_topic"
+    - "same_method_family"
+  link_strategy: "keyword-first"
+  relation_store: "runtime/artifacts/relations.json"
+
+runtime:
+  cache_dir: "runtime/cache"
+  run_dir: "runtime/runs"
+  artifact_dir: "runtime/artifacts"
+  log_dir: "runtime/logs"
+  log_level: "INFO"
+  retry_limit: 3
+  request_timeout_seconds: 20
+  dedupe_strategy: "paper_id_then_title"
