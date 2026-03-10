@@ -18,6 +18,7 @@
 - `title`
 - `paper_id`
 - `profile_id`
+- `dossier_mode`
 - `state`
 - `generated_at`
 

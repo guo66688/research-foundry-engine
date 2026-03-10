@@ -19,4 +19,17 @@
 - 默认权重来自 `workflow.yaml -> triage_policy.score_weights`
 - profile 覆盖来自 `profiles.yaml -> scoring_overrides`
 
+## 非黑箱输出字段
+
+- `score_breakdown`：记录四类分项分数
+- `decision`：`selected` 或 `rejected`
+- `decision_reasons`：拒绝或入选原因代码
+- `dedupe_group_id`：去重分组键
+
+## 去重优先级
+
+- 优先按 `paper_id`
+- 缺少 `paper_id` 时按标题 slug
+- 同组只保留最高分项，其余记录以拒绝项形式保留
+
 更细的字段定义以项目主文档 [docs/data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md) 为准。

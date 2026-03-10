@@ -42,3 +42,6 @@
 - `stage`
 - `artifacts`
 - `candidate_count`
+- `source_counts`
+- `source_status`
+- `warnings`

@@ -30,5 +30,9 @@
 - `title`
 - `state`
 - `scores`
+- `score_breakdown`
 - `tier`
+- `decision`
+- `decision_reasons`
+- `dedupe_group_id`
 - `reason`

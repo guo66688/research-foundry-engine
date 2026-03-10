@@ -24,6 +24,7 @@
 - `state`
 - `artifacts`
 - `registered_at`
+- `updated_at`
 
 ## `run_registry.jsonl` 每项至少包含
 
