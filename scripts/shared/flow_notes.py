@@ -49,6 +49,7 @@ def scan_notes(notes_root: Path) -> List[Dict[str, object]]:
                 "title": str(title),
                 "tags": [str(tag) for tag in tags],
                 "path": str(note_path),
+                "modified_at": note_path.stat().st_mtime,
                 "content": content,
             }
         )
@@ -100,7 +101,8 @@ def score_note_matches(dossier: Dict[str, object], notes: List[Dict[str, object]
                 "path": note["path"],
                 "score": len(overlaps),
                 "overlaps": overlaps[:8],
+                "modified_at": note.get("modified_at", 0),
             }
         )
-    scored.sort(key=lambda item: int(item["score"]), reverse=True)
+    scored.sort(key=lambda item: (int(item["score"]), float(item.get("modified_at", 0))), reverse=True)
     return scored

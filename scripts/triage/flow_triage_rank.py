@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import sys
 
@@ -19,6 +19,7 @@ from scripts.shared.flow_common import (  # noqa: E402
     read_jsonl,
     resolve_runtime_path,
     select_profile,
+    slugify,
     utc_timestamp,
     write_json,
 )
@@ -96,34 +97,39 @@ def score_record(record: Dict[str, Any], weights: Dict[str, float], profile: Dic
     }
 
 
-def dedupe(records: List[Dict[str, Any]], strategy: str) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
-    seen_paper_ids = set()
-    seen_titles = set()
-    for record in records:
-        paper_id = record.get("paper_id", "")
-        title = record.get("title", "").strip().lower()
-        if strategy == "paper_id_then_title":
-            if paper_id and paper_id in seen_paper_ids:
-                continue
-            if title and title in seen_titles:
-                continue
-            if paper_id:
-                seen_paper_ids.add(paper_id)
-            if title:
-                seen_titles.add(title)
-            output.append(record)
-            continue
-        output.append(record)
-    return output
+def dedupe_group_id(record: Dict[str, Any], strategy: str) -> str:
+    paper_id = str(record.get("paper_id", "")).strip()
+    title = str(record.get("title", "")).strip()
+    if strategy == "paper_id_then_title":
+        if paper_id:
+            return f"paper:{paper_id}"
+        return f"title:{slugify(title)}"
+    return f"raw:{slugify(paper_id or title)}"
 
 
-def tier_record(rank: int, shortlist_size: int, selected_count: int) -> str:
+def tier_record(rank: int, shortlist_size: int) -> str:
     if rank < shortlist_size:
         if rank < max(1, shortlist_size // 3):
             return "priority"
         return "watch"
     return "discard"
+
+
+def finalize_record(
+    record: Dict[str, Any],
+    *,
+    decision: str,
+    decision_reasons: List[str],
+    tier: str,
+) -> Dict[str, Any]:
+    bundle = dict(record)
+    bundle["tier"] = tier
+    bundle["state"] = "triaged"
+    bundle["decision"] = decision
+    bundle["decision_reasons"] = decision_reasons
+    bundle["reason"] = ", ".join(decision_reasons)
+    bundle["score_breakdown"] = dict(bundle.get("scores", {}).get("components", {}))
+    return bundle
 
 
 def write_reading_queue(path: Path, result: Dict[str, Any]) -> None:
@@ -142,6 +148,7 @@ def write_reading_queue(path: Path, result: Dict[str, Any]) -> None:
         lines.append(f"- score: `{item['scores']['total']}`")
         lines.append(f"- tier: `{item['tier']}`")
         lines.append(f"- source: `{item['source']}`")
+        lines.append(f"- decision_reasons: `{', '.join(item['decision_reasons'])}`")
         lines.append("")
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
 
@@ -175,43 +182,76 @@ def main() -> int:
 
     base_weights = workflow.get("triage_policy", {}).get("score_weights", {})
     weights = merged_weights(base_weights, profile.get("scoring_overrides", {}))
-    deduped = dedupe(records, workflow.get("runtime", {}).get("dedupe_strategy", "paper_id_then_title"))
+    strategy = workflow.get("runtime", {}).get("dedupe_strategy", "paper_id_then_title")
 
     scored: List[Dict[str, Any]] = []
-    for record in deduped:
+    for record in records:
         bundle = dict(record)
         bundle["scores"] = score_record(bundle, weights, profile)
+        bundle["dedupe_group_id"] = dedupe_group_id(bundle, strategy)
         scored.append(bundle)
 
-    scored.sort(key=lambda item: item["scores"]["total"], reverse=True)
+    # 先按组挑出主记录，再把组内剩余项作为重复项显式拒绝，避免静默消失。
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for item in scored:
+        grouped.setdefault(item["dedupe_group_id"], []).append(item)
+
+    primary_records: List[Dict[str, Any]] = []
+    rejected_duplicates: List[Dict[str, Any]] = []
+    for group_records in grouped.values():
+        group_records.sort(key=lambda item: item["scores"]["total"], reverse=True)
+        primary_records.append(group_records[0])
+        for duplicate in group_records[1:]:
+            rejected_duplicates.append(
+                finalize_record(
+                    duplicate,
+                    decision="rejected",
+                    decision_reasons=["duplicate_record", "lower_than_group_best"],
+                    tier="discard",
+                )
+            )
+
+    primary_records.sort(key=lambda item: item["scores"]["total"], reverse=True)
     shortlist_size = min(
         int(workflow.get("triage_policy", {}).get("shortlist_size", 12)),
         int(profile.get("max_candidates", 50)),
-        len(scored),
+        len(primary_records),
     )
 
     selected: List[Dict[str, Any]] = []
-    rejected: List[Dict[str, Any]] = []
-    for index, record in enumerate(scored):
-        bundle = dict(record)
-        bundle["tier"] = tier_record(index, shortlist_size, len(scored))
-        bundle["state"] = "triaged"
-        bundle["reason"] = "selected for queue" if bundle["tier"] != "discard" else "below shortlist threshold"
-        if bundle["tier"] == "discard":
-            rejected.append(bundle)
+    rejected: List[Dict[str, Any]] = list(rejected_duplicates)
+    for index, record in enumerate(primary_records):
+        tier = tier_record(index, shortlist_size)
+        if tier == "discard":
+            rejected.append(
+                finalize_record(
+                    record,
+                    decision="rejected",
+                    decision_reasons=["below_shortlist_threshold"],
+                    tier=tier,
+                )
+            )
         else:
-            selected.append(bundle)
+            selected.append(
+                finalize_record(
+                    record,
+                    decision="selected",
+                    decision_reasons=["rank_within_shortlist"],
+                    tier=tier,
+                )
+            )
 
     result = {
         "run_id": run_id,
         "profile_id": profile["profile_id"],
         "generated_at": utc_timestamp(),
         "input_path": str(Path(args.input)),
-        "dedupe_strategy": workflow.get("runtime", {}).get("dedupe_strategy", "paper_id_then_title"),
+        "dedupe_strategy": strategy,
         "weights": weights,
         "stats": {
             "input_count": len(records),
-            "deduped_count": len(deduped),
+            "deduped_count": len(primary_records),
+            "duplicate_rejected_count": len(rejected_duplicates),
             "selected_count": len(selected),
             "rejected_count": len(rejected),
         },

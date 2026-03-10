@@ -37,6 +37,26 @@ def parse_artifacts(raw_items: List[str]) -> List[Dict[str, str]]:
     return artifacts
 
 
+def merge_artifacts(existing: List[Dict[str, str]], incoming: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    # registry 使用 upsert 语义，但不能在重复执行时丢掉旧的产物引用。
+    merged: List[Dict[str, str]] = []
+    seen = set()
+    for item in existing + incoming:
+        key = (item.get("kind", ""), item.get("path", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append({"kind": key[0], "path": key[1]})
+    return merged
+
+
+def find_existing(entries: List[Dict[str, object]], key_fields: List[str], record: Dict[str, object]) -> Dict[str, object]:
+    for entry in entries:
+        if all(entry.get(name) == record.get(name) for name in key_fields):
+            return entry
+    return {}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Register run outputs and stable artifacts.")
     parser.add_argument("--config", required=True, help="Path to workflow config")
@@ -61,6 +81,7 @@ def main() -> int:
 
     run_manifest_path = run_dir / "run_manifest.json"
     run_manifest = read_json(run_manifest_path, default={}) or {}
+    merged_manifest_artifacts = merge_artifacts(list(run_manifest.get("artifacts", [])), artifacts)
     run_manifest.update(
         {
             "run_id": args.run_id,
@@ -68,7 +89,7 @@ def main() -> int:
             "started_at": run_manifest.get("started_at", registered_at),
             "updated_at": registered_at,
             "status": "completed" if args.state == "registered" else "running",
-            "artifacts": artifacts,
+            "artifacts": merged_manifest_artifacts,
         }
     )
     write_json(run_manifest_path, run_manifest)
@@ -77,6 +98,11 @@ def main() -> int:
     run_registry_path = artifact_dir / "run_registry.jsonl"
 
     paper_entries = read_jsonl(paper_registry_path)
+    existing_paper_record = find_existing(
+        paper_entries,
+        ["run_id", "paper_id"],
+        {"run_id": args.run_id, "paper_id": args.paper_id},
+    )
     paper_record = {
         "run_id": args.run_id,
         "paper_id": args.paper_id,
@@ -84,19 +110,21 @@ def main() -> int:
         "title": title,
         "slug": slug,
         "state": args.state,
-        "artifacts": artifacts,
-        "registered_at": registered_at,
+        "artifacts": merge_artifacts(list(existing_paper_record.get("artifacts", [])), artifacts),
+        "registered_at": existing_paper_record.get("registered_at", registered_at),
+        "updated_at": registered_at,
     }
     write_jsonl(paper_registry_path, replace_jsonl_entry(paper_entries, paper_record, ["run_id", "paper_id"]))
 
     run_entries = read_jsonl(run_registry_path)
+    existing_run_record = find_existing(run_entries, ["run_id"], {"run_id": args.run_id})
     run_record = {
         "run_id": args.run_id,
         "profile_id": args.profile_id,
         "started_at": run_manifest.get("started_at", registered_at),
         "updated_at": registered_at,
         "status": run_manifest["status"],
-        "artifacts": artifacts,
+        "artifacts": merge_artifacts(list(existing_run_record.get("artifacts", [])), artifacts),
     }
     write_jsonl(run_registry_path, replace_jsonl_entry(run_entries, run_record, ["run_id"]))
 

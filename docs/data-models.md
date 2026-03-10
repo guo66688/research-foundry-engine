@@ -46,6 +46,22 @@
 - `state`
 - `fetched_at`
 
+### `run_manifest.json`
+
+顶层字段至少应包含：
+
+- `run_id`
+- `profile_id`
+- `started_at`
+- `updated_at`
+- `status`
+- `stage`
+- `artifacts`
+- `candidate_count`
+- `source_counts`
+- `source_status`
+- `warnings`
+
 ### `triage_result.json`
 
 顶层字段：
@@ -66,7 +82,11 @@
 - `title`
 - `state`
 - `scores`
+- `score_breakdown`
 - `tier`
+- `decision`
+- `decision_reasons`
+- `dedupe_group_id`
 - `reason`
 
 ### `figure_manifest-<paper_id>.json`
@@ -98,6 +118,7 @@
 - `state`
 - `artifacts`
 - `registered_at`
+- `updated_at`
 
 ### `run_registry.jsonl`
 

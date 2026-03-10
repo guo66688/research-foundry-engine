@@ -24,6 +24,18 @@ from scripts.shared.flow_relations import (  # noqa: E402
 LOGGER = logging.getLogger("flow_synthesis_link")
 
 
+def dedupe_matches(matches: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    output: List[Dict[str, object]] = []
+    seen_note_ids = set()
+    for match in matches:
+        note_id = match["note_id"]
+        if note_id in seen_note_ids:
+            continue
+        seen_note_ids.add(note_id)
+        output.append(match)
+    return output
+
+
 def build_report(dossier: Dict[str, object], matches: List[Dict[str, object]]) -> str:
     lines = [
         f"# Synthesis Report: {dossier['title']}",
@@ -48,6 +60,7 @@ def build_report(dossier: Dict[str, object], matches: List[Dict[str, object]]) -
         lines.append(f"### {match['title']}")
         lines.append(f"- path: `{match['path']}`")
         lines.append(f"- overlap_score: `{match['score']}`")
+        lines.append(f"- relation_score: `{match['relation_score']}`")
         lines.append(f"- overlap_terms: `{', '.join(match['overlaps'])}`")
         lines.append("")
     return "\n".join(lines).strip() + "\n"
@@ -68,9 +81,19 @@ def main() -> int:
     dossier = dossier_snapshot(Path(args.dossier))
     notes_root_value = args.notes_root or workflow.get("workspace", {}).get("notes_root", "")
     notes_root = Path(notes_root_value) if notes_root_value else Path("__missing_notes_root__")
-    matches = score_note_matches(dossier, scan_notes(notes_root))
+    matches = dedupe_matches(score_note_matches(dossier, scan_notes(notes_root)))
     max_backlinks = int(workflow.get("synthesis_policy", {}).get("max_backlinks", 8))
-    selected_matches = matches[:max_backlinks]
+    relation_score_threshold = float(workflow.get("synthesis_policy", {}).get("relation_score_threshold", 0.2))
+    allowed_relation_types = set(workflow.get("synthesis_policy", {}).get("relation_types", ["shares_topic"]))
+    filtered_matches: List[Dict[str, object]] = []
+    for match in matches:
+        relation_score = min(float(match["score"]) / 10.0, 1.0)
+        if relation_score < relation_score_threshold:
+            continue
+        bundle = dict(match)
+        bundle["relation_score"] = round(relation_score, 3)
+        filtered_matches.append(bundle)
+    selected_matches = filtered_matches[:max_backlinks]
 
     artifact_dir = resolve_runtime_path(workflow, "artifact")
     paper_id = dossier["paper_id"] or slugify(str(dossier["title"]))
@@ -111,16 +134,17 @@ def main() -> int:
                 "paper_id": "",
             },
         )
-        upsert_edge(
-            relations,
-            {
-                "id": make_relation_id(paper_node_id, str(match["note_id"]), "shares_topic"),
-                "source": paper_node_id,
-                "target": match["note_id"],
-                "type": "shares_topic",
-                "weight": min(float(match["score"]) / 10.0, 1.0),
-            },
-        )
+        if "shares_topic" in allowed_relation_types:
+            upsert_edge(
+                relations,
+                {
+                    "id": make_relation_id(paper_node_id, str(match["note_id"]), "shares_topic"),
+                    "source": paper_node_id,
+                    "target": match["note_id"],
+                    "type": "shares_topic",
+                    "weight": float(match["relation_score"]),
+                },
+            )
     save_relations(relations_path, relations)
 
     LOGGER.info("synthesis_report=%s", report_path)

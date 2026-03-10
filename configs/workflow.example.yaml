@@ -41,6 +41,7 @@ dossier_policy:
 synthesis_policy:
   backlinking: true
   max_backlinks: 8
+  relation_score_threshold: 0.2
   relation_types:
     - "extends"
     - "references"

@@ -72,6 +72,7 @@ def build_dossier_markdown(
     workflow: Dict[str, Any],
     profile: Dict[str, Any],
     figure_manifest: Optional[Dict[str, Any]],
+    dossier_mode: str,
 ) -> str:
     policy = workflow.get("dossier_policy", {})
     sections = policy.get("include_sections", ["snapshot", "claims", "evidence", "questions"])
@@ -83,6 +84,7 @@ def build_dossier_markdown(
         f'title: "{title.replace(chr(34), chr(39))}"',
         f'paper_id: "{paper_id}"',
         f'profile_id: "{profile["profile_id"]}"',
+        f'dossier_mode: "{dossier_mode}"',
         'state: "dossier_ready"',
         f'generated_at: "{utc_timestamp()}"',
         "---",
@@ -101,6 +103,7 @@ def build_dossier_markdown(
                 f"- authors: `{', '.join(record.get('authors', [])) or 'unknown'}`",
                 f"- source_url: {record.get('source_url', '') or 'n/a'}",
                 f"- pdf_url: {record.get('pdf_url', '') or 'n/a'}",
+                f"- dossier_mode: `{dossier_mode}`",
                 "",
                 "## Abstract Snapshot",
                 "",
@@ -149,6 +152,17 @@ def build_dossier_markdown(
     return "\n".join(lines).strip() + "\n"
 
 
+def resolve_dossier_mode(workflow: Dict[str, Any], requested_mode: str, skip_figures: bool) -> str:
+    if requested_mode and requested_mode != "auto":
+        return requested_mode
+    if skip_figures:
+        return "offline_no_figures"
+    figure_mode = str(workflow.get("dossier_policy", {}).get("figure_mode", "disabled"))
+    if figure_mode == "disabled":
+        return "dossier_only"
+    return "dossier_with_figures"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build a structured evidence dossier for one paper.")
     parser.add_argument("--config", required=True, help="Path to workflow config")
@@ -158,6 +172,12 @@ def main() -> int:
     parser.add_argument("--triage-file", default="", help="Optional triage_result.json path")
     parser.add_argument("--candidate-file", default="", help="Optional candidate_pool.jsonl path")
     parser.add_argument("--output", default="", help="Optional dossier output path")
+    parser.add_argument(
+        "--mode",
+        default="auto",
+        choices=["auto", "dossier_only", "dossier_with_figures", "offline_no_figures"],
+        help="Explicit dossier generation mode",
+    )
     parser.add_argument("--skip-figures", action="store_true", help="Disable figure extraction")
     args = parser.parse_args()
 
@@ -176,8 +196,9 @@ def main() -> int:
     figure_dir = artifact_dir / f"figures-{paper_id}"
     figure_manifest_path = artifact_dir / f"figure_manifest-{paper_id}.json"
     figure_manifest = None
+    dossier_mode = resolve_dossier_mode(workflow, args.mode, args.skip_figures)
 
-    if not args.skip_figures and workflow.get("dossier_policy", {}).get("figure_mode", "disabled") != "disabled":
+    if dossier_mode == "dossier_with_figures":
         try:
             figure_manifest = build_figure_manifest(
                 paper_id,
@@ -192,8 +213,12 @@ def main() -> int:
             LOGGER.warning("figure extraction skipped: %s", error)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(build_dossier_markdown(record, workflow, profile, figure_manifest), encoding="utf-8")
+    output_path.write_text(
+        build_dossier_markdown(record, workflow, profile, figure_manifest, dossier_mode),
+        encoding="utf-8",
+    )
     LOGGER.info("dossier=%s", output_path)
+    LOGGER.info("dossier_mode=%s", dossier_mode)
     if figure_manifest:
         LOGGER.info("figure_manifest=%s", figure_manifest_path)
     return 0

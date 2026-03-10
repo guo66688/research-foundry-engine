@@ -41,7 +41,7 @@
 
 ### `dossier_policy`
 
-- `figure_mode`：图像提取策略
+- `figure_mode`：图像提取策略，可映射到 `dossier_with_figures` 或 `dossier_only`
 - `include_sections`：dossier 要包含的章节
 - `citation_style`：引用风格
 - `summary_length`：摘要长度档位
@@ -51,6 +51,7 @@
 
 - `backlinking`：是否生成 backlinks
 - `max_backlinks`：最多链接多少条已有笔记
+- `relation_score_threshold`：relation 写入阈值，低于该值不落边
 - `relation_types`：允许写入的 relation 类型
 - `link_strategy`：关联策略
 - `relation_store`：relation 文件路径

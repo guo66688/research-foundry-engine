@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import sys
 
@@ -15,7 +15,6 @@ from scripts.shared.flow_common import (  # noqa: E402
     ensure_dir,
     load_yaml,
     make_run_id,
-    replace_jsonl_entry,
     resolve_runtime_path,
     select_profile,
     utc_timestamp,
@@ -47,6 +46,51 @@ def dedupe_candidates(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return output
 
 
+def collect_source_records(
+    workflow: Dict[str, Any],
+    profile: Dict[str, Any],
+    source_scope: List[str],
+) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], List[str]]:
+    records: List[Dict[str, Any]] = []
+    source_status: Dict[str, Dict[str, Any]] = {}
+    warnings: List[str] = []
+
+    for source_name in source_scope:
+        try:
+            if source_name == "arxiv":
+                source_records = fetch_arxiv_candidates(workflow, profile)
+            elif source_name == "semantic_scholar":
+                source_records = fetch_semantic_scholar_candidates(workflow, profile)
+            else:
+                warnings.append(f"unknown source skipped: {source_name}")
+                source_status[source_name] = {
+                    "status": "skipped",
+                    "candidate_count": 0,
+                    "warning": "unknown source name",
+                }
+                continue
+        except RuntimeError as error:
+            # 多源抓取允许部分成功，但失败源必须被显式记录。
+            warnings.append(f"{source_name} failed: {error}")
+            source_status[source_name] = {
+                "status": "failed",
+                "candidate_count": 0,
+                "error": str(error),
+            }
+            continue
+
+        records.extend(source_records)
+        status = "ok" if source_records else "empty"
+        source_status[source_name] = {
+            "status": status,
+            "candidate_count": len(source_records),
+        }
+        if not source_records:
+            warnings.append(f"{source_name} returned zero records")
+
+    return records, source_status, warnings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fetch and normalize candidate papers for one research profile.")
     parser.add_argument("--config", required=True, help="Path to workflow config")
@@ -66,37 +110,49 @@ def main() -> int:
     output_path = Path(args.output) if args.output else run_dir / "candidate_pool.jsonl"
     manifest_path = run_dir / "run_manifest.json"
 
-    source_scope = profile.get("source_scope") or ["arxiv", "semantic_scholar"]
-    records: List[Dict[str, Any]] = []
-    source_counts: Dict[str, int] = {}
-
-    if "arxiv" in source_scope:
-        arxiv_records = fetch_arxiv_candidates(workflow, profile)
-        source_counts["arxiv"] = len(arxiv_records)
-        records.extend(arxiv_records)
-
-    if "semantic_scholar" in source_scope:
-        scholar_records = fetch_semantic_scholar_candidates(workflow, profile)
-        source_counts["semantic_scholar"] = len(scholar_records)
-        records.extend(scholar_records)
+    source_scope = list(profile.get("source_scope") or ["arxiv", "semantic_scholar"])
+    records, source_status, warnings = collect_source_records(workflow, profile, source_scope)
 
     for record in records:
         record["run_id"] = run_id
 
     unique_records = dedupe_candidates(records)
+    source_counts = {
+        source_name: int(payload.get("candidate_count", 0))
+        for source_name, payload in source_status.items()
+    }
+    manifest_payload = {
+        "run_id": run_id,
+        "profile_id": profile["profile_id"],
+        "started_at": utc_timestamp(),
+        "updated_at": utc_timestamp(),
+        "stage": "source-intake",
+        "source_counts": source_counts,
+        "source_status": source_status,
+        "warnings": warnings,
+        "candidate_count": len(unique_records),
+    }
+
+    if not unique_records:
+        write_json(
+            manifest_path,
+            {
+                **manifest_payload,
+                "status": "failed",
+                "artifacts": [],
+            },
+        )
+        LOGGER.error("no candidate records were produced")
+        LOGGER.error("source_status=%s", source_status)
+        return 1
+
     write_jsonl(output_path, unique_records)
     write_json(
         manifest_path,
         {
-            "run_id": run_id,
-            "profile_id": profile["profile_id"],
-            "started_at": utc_timestamp(),
-            "updated_at": utc_timestamp(),
-            "status": "running",
-            "stage": "source-intake",
+            **manifest_payload,
+            "status": "completed",
             "artifacts": [{"kind": "candidate_pool", "path": str(output_path)}],
-            "source_counts": source_counts,
-            "candidate_count": len(unique_records),
         },
     )
 
