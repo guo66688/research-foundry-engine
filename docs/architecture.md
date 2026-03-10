@@ -1,47 +1,45 @@
-# Architecture
+# 架构说明
 
-Research Foundry is split into five execution phases with explicit handoffs.
+Research Foundry 按五个明确的执行阶段组织，每个阶段只读写自己的输入输出，不跨界承担别人的职责。
 
-## Phase Responsibilities
+## 阶段职责
 
 ### `source-intake`
 
-- Inputs: workflow config, profile config, `profile_id`
-- Outputs: `candidate_pool.jsonl`
-- Responsibility: fetch source records and normalize them into a common schema
-- Not responsible for: ranking, dossier generation, note linking, registry updates
+- 输入：workflow 配置、profiles 配置、`profile_id`
+- 输出：`candidate_pool.jsonl`
+- 负责：从外部源抓取论文记录并标准化为统一 schema
+- 不负责：排序打分、dossier 生成、笔记关联、registry 更新
 
 ### `candidate-triage`
 
-- Inputs: `candidate_pool.jsonl`, workflow config, profile config
-- Outputs: `triage_result.json`, `reading_queue-<run_id>.md`
-- Responsibility: score, deduplicate, layer, and shortlist candidates
-- Not responsible for: source fetching, dossier generation, relation updates
+- 输入：`candidate_pool.jsonl`、workflow 配置、profiles 配置
+- 输出：`triage_result.json`、`reading_queue-<run_id>.md`
+- 负责：打分、去重、分层、shortlist 生成
+- 不负责：原始数据抓取、单篇档案生成、relation 更新
 
 ### `evidence-dossier`
 
-- Inputs: `paper_id`, candidate or triage metadata, dossier policy
-- Outputs: `dossier-<paper_id>-<slug>.md`, optional `figure_manifest-<paper_id>.json`
-- Responsibility: build a structured evidence package for one paper
-- Not responsible for: global ranking, note graph maintenance, registry writes
+- 输入：`paper_id`、candidate 或 triage 元数据、dossier 策略
+- 输出：`dossier-<paper_id>-<slug>.md`，可选 `figure_manifest-<paper_id>.json`
+- 负责：围绕单篇论文生成结构化 evidence package
+- 不负责：全局优先级排序、知识图维护、registry 写入
 
 ### `knowledge-synthesis`
 
-- Inputs: dossier markdown, notes root, relation policy
-- Outputs: `synthesis_report.md`, `relations.json`
-- Responsibility: link new material to existing notes and relation graph
-- Not responsible for: reranking, full-paper parsing, run registration
+- 输入：dossier Markdown、notes root、relation 策略
+- 输出：`synthesis_report-<paper_id>.md`、`relations.json`
+- 负责：把新 dossier 连接到已有笔记和关系边
+- 不负责：重排候选池、全文深度解析、运行登记
 
 ### `run-registry`
 
-- Inputs: run metadata, paper identifiers, artifact paths
-- Outputs: `run_manifest.json`, `paper_registry.jsonl`, `run_registry.jsonl`
-- Responsibility: register what happened and where outputs landed
-- Not responsible for: content generation, source access, relation inference
+- 输入：run 元数据、paper 标识、artifact 路径
+- 输出：`run_manifest.json`、`paper_registry.jsonl`、`run_registry.jsonl`
+- 负责：登记发生了什么、产物在哪、状态是什么
+- 不负责：内容生成、源数据访问、关系推理
 
-## Dependency Order
-
-Default order:
+## 默认依赖顺序
 
 1. `source-intake`
 2. `candidate-triage`
@@ -49,14 +47,16 @@ Default order:
 4. `knowledge-synthesis`
 5. `run-registry`
 
-## Standalone Execution
+## 哪些阶段可单独运行
 
-- `source-intake` can run by itself to refresh candidate pools.
-- `candidate-triage` can rerun against an existing pool without refetching sources.
-- `evidence-dossier` can run from a triage file or a candidate file.
-- `knowledge-synthesis` can run on any valid dossier file.
-- `run-registry` can register artifacts after the fact if paths are known.
+- `source-intake`：可以单独刷新候选池。
+- `candidate-triage`：可以对已有候选池反复重跑，不必重新抓源。
+- `evidence-dossier`：可以基于 triage 文件或 candidate 文件独立运行。
+- `knowledge-synthesis`：可以直接对已有 dossier 做关联。
+- `run-registry`：只要 artifact 路径已知，就能补登记。
 
-## Contracts First
+## 设计原则
 
-Phase scripts are small by design. Shared logic belongs under `scripts/shared/`. Every phase must read and write the contracts defined in `docs/data-models.md`.
+- 先定义契约，再写脚本。
+- 共享逻辑放在 `scripts/shared/`，阶段脚本保持薄。
+- 所有阶段都必须遵守 [data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md) 中的数据契约。

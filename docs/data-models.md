@@ -1,17 +1,17 @@
-# Data Models
+# 数据契约
 
-This document defines the shared contract used by all five phases.
+这份文档定义五个阶段共享的数据模型。任何脚本新增字段、改状态、改命名，都应该先更新这里。
 
-## Identifier Rules
+## 标识规则
 
-- `run_id`: `run-<YYYYMMDDTHHMMSSZ>`
-- `paper_id`: canonical arXiv identifier when available, otherwise a normalized slug prefixed by source name
-- `profile_id`: lowercase snake case from profile config
-- `relation_id`: `rel-<source_slug>-<target_slug>-<relation_type>`
+- `run_id`：`run-<YYYYMMDDTHHMMSSZ>`
+- `paper_id`：优先使用规范化 arXiv ID；没有时使用带源前缀的 slug
+- `profile_id`：来自 profile 配置，使用小写 snake case
+- `relation_id`：`rel-<source_slug>-<target_slug>-<relation_type>`
 
-## State Flow
+## 状态流转
 
-The expected state progression is:
+推荐状态顺序：
 
 1. `discovered`
 2. `triaged`
@@ -19,13 +19,13 @@ The expected state progression is:
 4. `linked`
 5. `registered`
 
-Scripts may skip ahead only when they can prove prior artifacts already exist.
+只有在已知前置产物存在时，脚本才能跳过中间状态。
 
-## File Contracts
+## 文件契约
 
 ### `candidate_pool.jsonl`
 
-One JSON object per line with these fields:
+每行一个 JSON 对象，至少包含：
 
 - `run_id`
 - `profile_id`
@@ -48,7 +48,7 @@ One JSON object per line with these fields:
 
 ### `triage_result.json`
 
-Top-level fields:
+顶层字段：
 
 - `run_id`
 - `profile_id`
@@ -60,7 +60,7 @@ Top-level fields:
 - `selected`
 - `rejected`
 
-Each selected or rejected item must include:
+`selected` 和 `rejected` 里的每项至少包含：
 
 - `paper_id`
 - `title`
@@ -71,14 +71,14 @@ Each selected or rejected item must include:
 
 ### `figure_manifest-<paper_id>.json`
 
-Top-level fields:
+顶层字段：
 
 - `paper_id`
 - `generated_at`
 - `figure_count`
 - `items`
 
-Each item:
+`items` 里的每项至少包含：
 
 - `name`
 - `source`
@@ -88,7 +88,7 @@ Each item:
 
 ### `paper_registry.jsonl`
 
-One entry per registered paper artifact group:
+每行代表一个已登记的论文产物组：
 
 - `run_id`
 - `paper_id`
@@ -101,7 +101,7 @@ One entry per registered paper artifact group:
 
 ### `run_registry.jsonl`
 
-One entry per run:
+每行代表一次运行：
 
 - `run_id`
 - `profile_id`
@@ -112,13 +112,13 @@ One entry per run:
 
 ### `relations.json`
 
-Top-level fields:
+顶层字段：
 
 - `updated_at`
 - `nodes`
 - `edges`
 
-Node fields:
+节点字段：
 
 - `id`
 - `kind`
@@ -126,7 +126,7 @@ Node fields:
 - `path`
 - `paper_id`
 
-Edge fields:
+边字段：
 
 - `id`
 - `source`
@@ -134,14 +134,14 @@ Edge fields:
 - `type`
 - `weight`
 
-## Naming Rules
+## 命名规则
 
-- Dossier markdown: `dossier-<paper_id>-<slug>.md`
-- Figure manifest: `figure_manifest-<paper_id>.json`
-- Reading queue: `reading_queue-<run_id>.md`
-- Run manifest: `run_manifest.json`
+- dossier 文件：`dossier-<paper_id>-<slug>.md`
+- 图像清单：`figure_manifest-<paper_id>.json`
+- 阅读队列：`reading_queue-<run_id>.md`
+- 单次运行摘要：`run_manifest.json`
 
-## Enum Values
+## 枚举值
 
 ### `tier`
 

@@ -1,28 +1,39 @@
 # Research Foundry
 
-Research Foundry is a Codex-oriented workflow toolkit for paper intake, triage, evidence capture, knowledge linking, and run registration. It is organized as a research pipeline first and a skill collection second.
+Research Foundry 是一个面向 Codex 的研究流程工具箱，用来把论文发现、筛选、证据整理、知识关联和运行登记串成一条清晰的工程化流水线。项目优先强调流程阶段和数据契约，而不是零散动作集合。
 
-## What It Solves
+## 项目目标
 
-- Turn raw paper feeds into a candidate pool tied to a research profile.
-- Score and trim that pool into a deliberate reading queue.
-- Build a structured evidence dossier for one paper at a time.
-- Link new findings back into an existing note base.
-- Register runs and artifacts so the workflow stays auditable.
+- 从论文源中拉取候选记录，并归入明确的研究画像。
+- 用统一规则做评分、去重和阅读队列生成。
+- 围绕单篇论文生成结构化 evidence dossier。
+- 把新结论回连到本地笔记库和关系图。
+- 记录每次运行与产物，保证流程可追溯。
 
-## Workflow Shape
+## 核心流程
 
 `source-intake` -> `candidate-triage` -> `evidence-dossier` -> `knowledge-synthesis` -> `run-registry`
 
-Each phase has a narrow contract:
+五个阶段各自只负责一段职责：
 
-- `source-intake` fetches and normalizes source records.
-- `candidate-triage` scores, deduplicates, and emits a shortlist.
-- `evidence-dossier` builds a structured dossier plus figure manifest.
-- `knowledge-synthesis` links the dossier to existing notes and relations.
-- `run-registry` records the run and registers resulting artifacts.
+- `source-intake`：抓取并标准化候选论文。
+- `candidate-triage`：打分、去重、分层并输出阅读队列。
+- `evidence-dossier`：围绕单篇论文产出结构化证据档案。
+- `knowledge-synthesis`：把 dossier 连接到已有笔记和关系数据。
+- `run-registry`：登记运行元数据、产物路径和全局索引。
 
-## Repository Layout
+## 文档入口
+
+- 文档总览：[docs/index.md](/home/icoffee/Projects/codex-arxiv-tools/docs/index.md)
+- 快速开始：[QUICKSTART.md](/home/icoffee/Projects/codex-arxiv-tools/QUICKSTART.md)
+- 架构说明：[docs/architecture.md](/home/icoffee/Projects/codex-arxiv-tools/docs/architecture.md)
+- 配置说明：[docs/configuration.md](/home/icoffee/Projects/codex-arxiv-tools/docs/configuration.md)
+- 数据契约：[docs/data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md)
+- 运行与产物：[docs/runtime.md](/home/icoffee/Projects/codex-arxiv-tools/docs/runtime.md)
+- 命名与约定：[docs/conventions.md](/home/icoffee/Projects/codex-arxiv-tools/docs/conventions.md)
+- Skills 使用边界：[docs/skills.md](/home/icoffee/Projects/codex-arxiv-tools/docs/skills.md)
+
+## 目录结构
 
 ```text
 .
@@ -34,9 +45,12 @@ Each phase has a narrow contract:
 │   └── workflow.example.yaml
 ├── docs/
 │   ├── architecture.md
+│   ├── configuration.md
 │   ├── conventions.md
 │   ├── data-models.md
-│   └── runtime.md
+│   ├── index.md
+│   ├── runtime.md
+│   └── skills.md
 ├── .agents/
 │   └── skills/
 ├── scripts/
@@ -53,34 +67,22 @@ Each phase has a narrow contract:
     └── runs/
 ```
 
-## Configuration
+## 最小运行路径
 
-Workflow-wide settings live in `configs/workflow.example.yaml`.
-Research strategies live in `configs/profiles.example.yaml`.
-
-The split is intentional:
-
-- Workflow config describes storage, source settings, runtime behavior, and output policy.
-- Profile config describes research focus, candidate limits, source scope, and scoring overrides.
-
-Field definitions and file contracts are documented in `docs/data-models.md`.
-
-## Minimal Run
-
-Install dependencies:
+先安装依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Prepare local config copies:
+再准备本地配置：
 
 ```bash
 cp configs/workflow.example.yaml configs/workflow.yaml
 cp configs/profiles.example.yaml configs/profiles.yaml
 ```
 
-Run the smallest end-to-end path:
+然后依次执行：
 
 ```bash
 python scripts/intake/flow_intake_fetch.py \
@@ -113,22 +115,28 @@ python scripts/registry/flow_registry_update.py \
   --artifact dossier=runtime/artifacts/dossier-<paper_id>-<slug>.md
 ```
 
-## Using Codex Skills
+## 在 Codex 中如何使用
 
-The skills in `.agents/skills/` are operator guides for these phases. Use them when you want Codex to decide the exact command invocation, validate inputs, or explain a failure. Do not treat the skills as the project itself; they are thin operational overlays on top of the workflow scripts and data contracts.
+`.agents/skills/` 下的 skills 是这套流程的操作说明层，不是项目本体。适合在这几种情况下调用：
 
-## Optional Integrations
+- 需要 Codex 帮你判断应该跑哪个阶段。
+- 需要 Codex 根据输入输出契约拼出正确命令。
+- 需要 Codex 在失败时解释边界、前置条件和回退方式。
 
-- Local note library: set `workspace.notes_root` and related subdirectories.
-- Semantic Scholar API key: set the env var referenced by `sources.semantic_scholar.api_key_env`.
-- Figure extraction: enabled by `dossier_policy.figure_mode` and the dossier figure script.
+如果你已经清楚脚本入口和参数，直接运行 `scripts/` 下的 CLI 即可。
 
-## Verification
+## 可选集成
 
-After editing scripts, run:
+- 本地笔记库：通过 `workspace.notes_root` 及其子目录接入。
+- Semantic Scholar API Key：由 `sources.semantic_scholar.api_key_env` 指定环境变量名。
+- 图像提取：由 `dossier_policy.figure_mode` 控制，相关逻辑在 dossier 阶段。
+
+## 验证
+
+改动脚本后先运行：
 
 ```bash
 python -m compileall scripts
 ```
 
-Validation and runtime checks are listed in `docs/runtime.md`.
+如果只想验证 CLI 接口是否可用，可继续查看 [docs/runtime.md](/home/icoffee/Projects/codex-arxiv-tools/docs/runtime.md) 里的帮助命令。

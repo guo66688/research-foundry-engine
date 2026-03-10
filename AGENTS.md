@@ -1,43 +1,43 @@
 # AGENTS
 
-## Project Goal
+## 项目目标
 
-Research Foundry is a research workflow system for paper discovery, triage, evidence capture, synthesis, and registry maintenance. Treat the repository as a pipeline product, not a loose bag of actions.
+Research Foundry 是一套面向论文发现、筛选、证据整理、知识关联和运行登记的研究流程系统。把仓库视为一条流水线产品，而不是一组零散动作。
 
-## Naming Principles
+## 命名原则
 
-- Prefer neutral, professional names.
-- Keep phase names aligned with the pipeline: intake, triage, dossier, synthesis, registry.
-- Use `flow_<phase>_<action>.py` for scripts.
-- Use stable artifact names documented in `docs/data-models.md`.
+- 名称保持中性、专业。
+- 阶段名与流水线保持一致：`intake`、`triage`、`dossier`、`synthesis`、`registry`。
+- 脚本统一使用 `flow_<phase>_<action>.py`。
+- 产物命名以 [docs/data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md) 为准。
 
-## Reference Hygiene
+## 参考仓库隔离
 
-- Do not preserve expression-layer content from any reference repository.
-- Do not reintroduce legacy names, path conventions, prompt phrasing, or config field names.
-- All new copy must be written from scratch, not lightly paraphrased.
+- 不要保留任何参考仓库的表达层内容。
+- 不要重新引入旧名称、旧路径风格、旧 prompt 话术或旧配置字段。
+- 所有新增文案必须重新写，不接受轻度改写。
 
-## Change Discipline
+## 变更纪律
 
-- When scripts change, provide at least one verification command.
-- Do not run `git commit` unless explicitly asked.
-- Do not run `git push` unless explicitly asked.
-- Keep documentation and code changes aligned in the same turn.
+- 改脚本后至少给出一个验证命令。
+- 未被明确要求时，不要执行 `git commit`。
+- 未被明确要求时，不要执行 `git push`。
+- 文档和代码改动应在同一轮内保持一致。
 
-## Skill Discipline
+## Skill 纪律
 
-- Before adding a new skill, check whether the work fits an existing phase.
-- Prefer instruction-heavy skills first; add scripts only when deterministic behavior or reuse justifies them.
-- Each skill must state when it should trigger and when it should not trigger.
-- Each skill must define its inputs, outputs, limits, and failure path.
+- 新增 skill 前，先判断能否并入现有阶段。
+- 优先使用说明型 skill，只有在需要确定性行为或复用时才补脚本。
+- 每个 skill 都必须写清楚何时触发、何时不该触发。
+- 每个 skill 都必须定义输入、输出、边界和失败处理。
 
-## Data Contracts
+## 数据契约
 
-- Treat `docs/data-models.md` as the source of truth for IDs, states, and JSON shape.
-- Do not invent new artifact names or state values without updating that document.
-- Keep status transitions consistent across scripts and skills.
+- `docs/data-models.md` 是 ID、状态和 JSON 结构的事实来源。
+- 未更新该文档前，不要私自发明新的产物名或状态值。
+- 脚本与 skills 的状态流转必须保持一致。
 
-## Validation
+## 验证要求
 
-- Use `python -m compileall scripts` after script edits.
-- When a script has a dedicated CLI path, include a concrete example command in the final report.
+- 改动脚本后运行 `python -m compileall scripts`。
+- 如果脚本有独立 CLI，最终汇报中要包含具体命令示例。
