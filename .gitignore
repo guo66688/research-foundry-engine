@@ -1,0 +1,38 @@
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local runtime outputs
+runtime/artifacts/*
+runtime/cache/*
+runtime/logs/*
+runtime/runs/*
+!runtime/artifacts/.gitkeep
+!runtime/cache/.gitkeep
+!runtime/logs/.gitkeep
+!runtime/runs/.gitkeep
+
+# Local config copies
+configs/workflow.yaml
+configs/profiles.yaml
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
