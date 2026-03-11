@@ -13,6 +13,15 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 import requests
 import yaml
 
+SUPPORT_ROOT = Path(__file__).resolve().parents[1]
+if str(SUPPORT_ROOT) not in sys.path:
+    sys.path.insert(0, str(SUPPORT_ROOT))
+
+from lib.canonical_backfill import find_missing_canonicals, load_canonical_map
+from lib.feedback_registry import append_runtime_events, load_feedback_events, load_registry_state, merge_feedback_events, registry_paths
+from lib.research_queue import build_daily_queue
+from lib.revisit_planner import plan_revisit_candidates
+
 
 PAPER_ID_PATTERN = re.compile(r"(\d{4}\.\d{4,5})(v\d+)?")
 
@@ -160,6 +169,74 @@ def load_yaml(path: Path) -> Dict[str, Any]:
 
 def utc_timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def triage_settings(workflow: Dict[str, Any]) -> Dict[str, Any]:
+    triage_block = workflow.get("triage", {}) if isinstance(workflow.get("triage", {}), dict) else {}
+    legacy_block = workflow.get("triage_policy", {}) if isinstance(workflow.get("triage_policy", {}), dict) else {}
+    scoring_block = triage_block.get("scoring", {}) if isinstance(triage_block.get("scoring", {}), dict) else {}
+    shortlist_block = triage_block.get("shortlist", {}) if isinstance(triage_block.get("shortlist", {}), dict) else {}
+    deepread_block = triage_block.get("deepread", {}) if isinstance(triage_block.get("deepread", {}), dict) else {}
+    diversity_block = triage_block.get("diversity", {}) if isinstance(triage_block.get("diversity", {}), dict) else {}
+    inventory_block = triage_block.get("inventory", {}) if isinstance(triage_block.get("inventory", {}), dict) else {}
+    feedback_block = triage_block.get("feedback", {}) if isinstance(triage_block.get("feedback", {}), dict) else {}
+    queue_block = triage_block.get("queue", {}) if isinstance(triage_block.get("queue", {}), dict) else {}
+    revisit_block = triage_block.get("revisit", {}) if isinstance(triage_block.get("revisit", {}), dict) else {}
+    backfill_block = triage_block.get("backfill", {}) if isinstance(triage_block.get("backfill", {}), dict) else {}
+    adaptation_block = triage_block.get("adaptation", {}) if isinstance(triage_block.get("adaptation", {}), dict) else {}
+
+    weights = dict(scoring_block.get("weights", legacy_block.get("score_weights", {})) or {})
+    if "recency" not in weights and "freshness" in weights:
+        weights["recency"] = weights["freshness"]
+    weights.pop("freshness", None)
+    shortlist_total = int(shortlist_block.get("total", legacy_block.get("shortlist_size", 10)) or 10)
+    return {
+        "weights": weights,
+        "shortlist": {
+            "total": shortlist_total,
+            "must_read": int(shortlist_block.get("must_read", 2) or 2),
+            "trend_watch": int(shortlist_block.get("trend_watch", 3) or 3),
+            "gap_fill": int(shortlist_block.get("gap_fill", max(shortlist_total - 5, 0)) or 0),
+        },
+        "deepread": {
+            "must_read_top2": int(deepread_block.get("must_read_top2", 2) or 2),
+            "gap_fill_top1": int(deepread_block.get("gap_fill_top1", 1) or 1),
+        },
+        "diversity": {
+            "max_per_bucket": dict(diversity_block.get("max_per_bucket", {}) or {}),
+            "min_per_bucket": dict(diversity_block.get("min_per_bucket", {}) or {}),
+        },
+        "inventory": {
+            "enable_daily_recommendations": bool(inventory_block.get("enable_daily_recommendations", True)),
+            "recent_window_days": int(inventory_block.get("recent_window_days", 90) or 90),
+        },
+        "feedback": {
+            "enabled": bool(feedback_block.get("enabled", True)),
+            "positive_events": list(feedback_block.get("positive_events", ["deepread", "mark_useful"]) or []),
+            "negative_events": list(feedback_block.get("negative_events", ["mark_not_useful", "ignored", "archived"]) or []),
+        },
+        "queue": {
+            "enabled": bool(queue_block.get("enabled", True)),
+            "max_active_items": int(queue_block.get("max_active_items", 30) or 30),
+            "max_daily_review_or_backfill": int(queue_block.get("max_daily_review_or_backfill", 2) or 2),
+            "demote_after_ignored_runs": int(queue_block.get("demote_after_ignored_runs", 3) or 3),
+        },
+        "revisit": {
+            "enabled": bool(revisit_block.get("enabled", True)),
+            "max_daily_items": int(revisit_block.get("max_daily_items", 2) or 2),
+            "prefer_recently_referenced": bool(revisit_block.get("prefer_recently_referenced", True)),
+        },
+        "backfill": {
+            "enabled": bool(backfill_block.get("enabled", True)),
+            "canonical_map": str(backfill_block.get("canonical_map", "configs/canonical_map.yaml") or "configs/canonical_map.yaml"),
+            "max_daily_items": int(backfill_block.get("max_daily_items", 2) or 2),
+        },
+        "adaptation": {
+            "enabled": bool(adaptation_block.get("enabled", True)),
+            "topic_weight_adjustment_cap": float(adaptation_block.get("topic_weight_adjustment_cap", 0.15) or 0.15),
+            "decay_factor": float(adaptation_block.get("decay_factor", 0.9) or 0.9),
+        },
+    }
 
 
 def canonical_paper_id(value: str) -> str:
@@ -590,16 +667,17 @@ def resolve_backend(mode: str = "auto") -> Backend:
     current_file = Path(__file__).resolve()
     repo_root = detect_repo_root(current_file)
     skills_root = detect_skills_root(current_file)
+    standalone_support_root = skills_root / ".internal" / "research-foundry" / "commands" if skills_root is not None else None
     if mode == "external":
         if repo_root is None:
             raise RuntimeError("external backend requested but repo scripts are unavailable")
         return Backend(mode="external", repo_root=repo_root, skills_root=skills_root, support_root=current_file.parent)
     if mode == "standalone":
-        if skills_root is None:
+        if skills_root is None or standalone_support_root is None or not standalone_support_root.exists():
             raise RuntimeError("standalone backend requested but installed skills are unavailable")
-        return Backend(mode="standalone", repo_root=None, skills_root=skills_root, support_root=current_file.parent)
-    if skills_root is not None:
-        return Backend(mode="standalone", repo_root=None, skills_root=skills_root, support_root=current_file.parent)
+        return Backend(mode="standalone", repo_root=None, skills_root=skills_root, support_root=standalone_support_root)
+    if skills_root is not None and standalone_support_root is not None and standalone_support_root.exists():
+        return Backend(mode="standalone", repo_root=None, skills_root=skills_root, support_root=standalone_support_root)
     if repo_root is not None:
         return Backend(mode="external", repo_root=repo_root, skills_root=skills_root, support_root=current_file.parent)
     raise RuntimeError("no execution backend available")
@@ -648,6 +726,109 @@ def deepread_context_path(workflow: Dict[str, Any], paper_id: str) -> Path:
 
 def daily_context_path(workflow: Dict[str, Any], run_id: str) -> Path:
     return runtime_artifact_root(workflow) / f"daily_context-{run_id}.json"
+
+
+def queue_decisions_path(workflow: Dict[str, Any], run_id: str) -> Path:
+    return runtime_artifact_root(workflow) / f"queue_decisions-{run_id}.json"
+
+
+def resolve_canonical_map_path(workflow: Dict[str, Any], config_path: Path) -> Path:
+    settings = triage_settings(workflow)
+    raw_path = str(settings.get("backfill", {}).get("canonical_map", "configs/canonical_map.yaml"))
+    candidate = Path(raw_path)
+    if candidate.is_absolute():
+        return candidate
+    return (config_path.parent / candidate).resolve()
+
+
+def plan_today_queue(
+    workflow: Dict[str, Any],
+    config_path: Path,
+    profile_id: str,
+    triage_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    settings = triage_settings(workflow)
+    runtime_paths = registry_paths(workflow)
+    paper_state_registry = load_registry_state(runtime_paths["paper_state_registry"], default={"papers": {}})
+    feedback_events = load_feedback_events(runtime_paths["feedback_registry"])
+    inventory = read_json(Path(str(triage_payload.get("knowledge_inventory_path", ""))), default={}) or {}
+
+    selected = list(triage_payload.get("selected", []))
+    selected_buckets = triage_payload.get("buckets", {}) or {}
+
+    canonical_suggestions: List[Dict[str, Any]] = []
+    canonical_state = load_registry_state(runtime_paths["canonical_backfill_state"], default={"generated_at": "", "missing_by_slot": {}})
+    if settings.get("backfill", {}).get("enabled", True):
+        canonical_map = load_canonical_map(resolve_canonical_map_path(workflow, config_path))
+        canonical_suggestions, canonical_state = find_missing_canonicals(
+            items=selected,
+            inventory=inventory,
+            canonical_map=canonical_map,
+        )
+
+    revisit_candidates: List[Dict[str, Any]] = []
+    if settings.get("revisit", {}).get("enabled", True):
+        revisit_candidates = plan_revisit_candidates(
+            inventory=inventory,
+            paper_state_registry=paper_state_registry,
+            selected_items=selected,
+            max_items=int(settings.get("revisit", {}).get("max_daily_items", 2) or 2),
+        )
+
+    review_candidates = canonical_suggestions[: int(settings.get("backfill", {}).get("max_daily_items", 2) or 2)]
+    revisit_remaining = int(settings.get("queue", {}).get("max_daily_review_or_backfill", 2) or 2) - len(review_candidates)
+    if revisit_remaining > 0:
+        review_candidates.extend(revisit_candidates[:revisit_remaining])
+
+    queue_plan = build_daily_queue(
+        run_id=str(triage_payload.get("run_id", "")),
+        selected_buckets=selected_buckets,
+        review_or_backfill=review_candidates,
+        paper_state_registry=paper_state_registry,
+        queue_settings=settings.get("queue", {}),
+    )
+
+    queue_decision_file = queue_decisions_path(workflow, str(triage_payload.get("run_id", "")))
+    write_json_file(queue_decision_file, queue_plan["queue_decisions"])
+
+    ignored_events: List[Dict[str, Any]] = []
+    for decision in queue_plan["queue_decisions"].get("decisions", []):
+        if decision.get("decision") != "marked_ignored":
+            continue
+        ignored_events.append(
+            {
+                "timestamp": utc_timestamp(),
+                "profile_id": profile_id,
+                "paper_id": decision.get("paper_id", ""),
+                "event_type": "ignored",
+                "source": "queue_manager",
+                "bucket": "",
+                "suggested_action": "",
+                "actual_action": "ignored",
+                "note_path": "",
+                "topics": [],
+                "knowledge_slots": [],
+                "metadata": {"reasons": decision.get("reasons", [])},
+            }
+        )
+    merged_feedback = merge_feedback_events(feedback_events, ignored_events)
+    append_runtime_events(
+        workflow=workflow,
+        feedback_events=merged_feedback,
+        paper_state_registry=queue_plan["paper_state_registry"],
+        adaptation_state=load_registry_state(runtime_paths["profile_adaptation_state"], default={}),
+        canonical_backfill_state=canonical_state,
+    )
+
+    return {
+        "final_buckets": queue_plan["final_buckets"],
+        "review_or_backfill": queue_plan["review_or_backfill"],
+        "queue_summary": queue_plan["queue_summary"],
+        "queue_decisions_path": str(queue_decision_file),
+        "feedback_registry_path": str(runtime_paths["feedback_registry"]),
+        "paper_state_registry_path": str(runtime_paths["paper_state_registry"]),
+        "canonical_backfill_state_path": str(runtime_paths["canonical_backfill_state"]),
+    }
 
 
 def list_recent_runs(run_root: Path) -> List[Path]:
@@ -1216,11 +1397,29 @@ def prepare_today_materials(
     triage: Dict[str, Any],
     triage_payload: Dict[str, Any],
     manifest_payload: Dict[str, Any],
+    queue_plan: Dict[str, Any],
     top_deepreads: int = 3,
 ) -> Dict[str, Any]:
     selected = list(triage_payload.get("selected", []))
+    bucket_payload = queue_plan.get("final_buckets", triage_payload.get("buckets", {}) or {})
+    deepread_plan = {
+        "must_read_top2": [item.get("paper_id", "") for item in bucket_payload.get("must_read", [])[:2]],
+        "gap_fill_top1": [item.get("paper_id", "") for item in bucket_payload.get("gap_fill", [])[:1]],
+    }
+    selected_map = {str(item.get("paper_id", "")): item for item in selected}
+    deepread_ids: List[str] = []
+    for key in ["must_read_top2", "gap_fill_top1"]:
+        for paper_id in deepread_plan.get(key, []) or []:
+            if paper_id and paper_id not in deepread_ids:
+                deepread_ids.append(str(paper_id))
+    if not deepread_ids:
+        deepread_ids = [str(item.get("paper_id", "")) for item in selected[: max(top_deepreads, 0)]]
+
     prepared_deepreads: List[Dict[str, Any]] = []
-    for record in selected[: max(top_deepreads, 0)]:
+    for paper_id in deepread_ids[: max(top_deepreads, 0)]:
+        record = selected_map.get(str(paper_id))
+        if not record:
+            continue
         bundle = dict(record)
         bundle["_triage_file"] = str(triage["triage_result"])
         bundle["_candidate_file"] = str(intake["candidate_pool"])
@@ -1246,6 +1445,8 @@ def prepare_today_materials(
                 "synthesis_report_path": str(prepared["synthesis_report_path"] or ""),
                 "full_text_path": str(prepared["full_text_path"] or ""),
                 "figure_paths": [str(item.get("path", "")) for item in prepared["copied_figures"]],
+                "recommendation_bucket": bundle.get("recommendation_bucket", ""),
+                "suggested_action": bundle.get("suggested_action", ""),
             }
         )
 
@@ -1260,6 +1461,7 @@ def prepare_today_materials(
                 "paper_id": item.get("paper_id", ""),
                 "title": item.get("title", ""),
                 "tier": item.get("tier", ""),
+                "score": item.get("scores", {}).get("total", item.get("score", 0.0)),
                 "scores": item.get("scores", {}),
                 "score_breakdown": item.get("score_breakdown", {}),
                 "profile_hits": list(item.get("profile_hits", [])),
@@ -1269,6 +1471,18 @@ def prepare_today_materials(
                 "published_at": item.get("published_at", ""),
                 "source_url": item.get("source_url", ""),
                 "pdf_url": item.get("pdf_url", ""),
+                "knowledge_gain": item.get("score_breakdown", {}).get("knowledge_gain", 0.0),
+                "redundancy_penalty": item.get("score_breakdown", {}).get("redundancy_penalty", 0.0),
+                "bridge_value": item.get("score_breakdown", {}).get("bridge_value", 0.0),
+                "bucket_hint": item.get("bucket_hint", ""),
+                "recommendation_bucket": item.get("recommendation_bucket", ""),
+                "suggested_action": item.get("suggested_action", ""),
+                "suggested_action_reason": item.get("suggested_action_reason", ""),
+                "explain": item.get("explain", {}),
+                "knowledge_reasons": item.get("knowledge_reasons", []),
+                "bridge_reasons": item.get("bridge_reasons", []),
+                "gap_matches": item.get("gap_matches", []),
+                "overlap_reasons": item.get("overlap_reasons", []),
             }
         )
     context_payload = {
@@ -1287,7 +1501,25 @@ def prepare_today_materials(
         "source_status": manifest_payload.get("source_status", {}),
         "warnings": list(manifest_payload.get("warnings", []) or []),
         "shortlist": shortlist_payload,
+        "must_read": bucket_payload.get("must_read", []),
+        "trend_watch": bucket_payload.get("trend_watch", []),
+        "gap_fill": bucket_payload.get("gap_fill", []),
+        "review_or_backfill": queue_plan.get("review_or_backfill", []),
+        "deepread_picks": deepread_plan,
         "top_deepreads": prepared_deepreads,
+        "knowledge_inventory_path": triage_payload.get("knowledge_inventory_path", ""),
+        "knowledge_topic_stats_path": triage_payload.get("knowledge_topic_stats_path", ""),
+        "triage_explanations_path": triage_payload.get("triage_explanations_path", ""),
+        "feedback_registry_path": queue_plan.get("feedback_registry_path", triage_payload.get("feedback_registry_path", "")),
+        "paper_state_registry_path": queue_plan.get("paper_state_registry_path", triage_payload.get("paper_state_registry_path", "")),
+        "canonical_backfill_state_path": queue_plan.get("canonical_backfill_state_path", ""),
+        "queue_decisions_path": queue_plan.get("queue_decisions_path", ""),
+        "queue_summary": queue_plan.get("queue_summary", {}),
+        "bucket_counts": {
+            "must_read": len(bucket_payload.get("must_read", [])),
+            "trend_watch": len(bucket_payload.get("trend_watch", [])),
+            "gap_fill": len(bucket_payload.get("gap_fill", [])),
+        },
     }
     write_json_file(context_path, context_payload)
     return {
