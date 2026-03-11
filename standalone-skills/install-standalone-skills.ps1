@@ -58,6 +58,12 @@ if (Test-Path $supportSource) {
         Remove-Item -Path $supportTarget -Recurse -Force
     }
     Copy-Item -Path $supportSource -Destination $supportTarget -Recurse -Force
+    if ($runtimePython) {
+        $supportRuntimeDir = Join-Path $supportTarget "research-foundry\.runtime"
+        New-Item -ItemType Directory -Path $supportRuntimeDir -Force | Out-Null
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        [System.IO.File]::WriteAllText((Join-Path $supportRuntimeDir "python.txt"), $runtimePython, $utf8NoBom)
+    }
 }
 
 foreach ($name in $Skill) {

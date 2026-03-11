@@ -97,6 +97,11 @@ SUPPORT_TARGET="$DESTINATION/.internal"
 if [ -d "$SUPPORT_SOURCE" ]; then
   rm -rf "$SUPPORT_TARGET"
   cp -R "$SUPPORT_SOURCE" "$SUPPORT_TARGET"
+  if [ -n "$RUNTIME_PYTHON" ]; then
+    mkdir -p "$SUPPORT_TARGET/research-foundry/.runtime"
+    printf '%s
+' "$RUNTIME_PYTHON" > "$SUPPORT_TARGET/research-foundry/.runtime/python.txt"
+  fi
 fi
 
 for name in "${SKILLS[@]}"; do

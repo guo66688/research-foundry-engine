@@ -267,6 +267,12 @@ if (Test-Path $supportSource) {
         Remove-Item -Path $supportTarget -Recurse -Force
     }
     Copy-Item -Path $supportSource -Destination $supportTarget -Recurse -Force
+    if ($runtimePython) {
+        $supportRuntimeDir = Join-Path $supportTarget "research-foundry\\.runtime"
+        New-Item -ItemType Directory -Path $supportRuntimeDir -Force | Out-Null
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        [System.IO.File]::WriteAllText((Join-Path $supportRuntimeDir "python.txt"), $runtimePython, $utf8NoBom)
+    }
 }
 
 foreach ($name in $Skill) {
@@ -402,6 +408,10 @@ SUPPORT_TARGET="$DESTINATION/.internal"
 if [ -d "$SUPPORT_SOURCE" ]; then
   rm -rf "$SUPPORT_TARGET"
   cp -R "$SUPPORT_SOURCE" "$SUPPORT_TARGET"
+  if [ -n "$RUNTIME_PYTHON" ]; then
+    mkdir -p "$SUPPORT_TARGET/research-foundry/.runtime"
+    printf '%s\n' "$RUNTIME_PYTHON" > "$SUPPORT_TARGET/research-foundry/.runtime/python.txt"
+  fi
 fi
 
 for name in "${SKILLS[@]}"; do
