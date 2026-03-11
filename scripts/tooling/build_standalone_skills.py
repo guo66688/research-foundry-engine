@@ -12,6 +12,7 @@ HANDOFF_MATRIX = SKILLS_ROOT / "references" / "handoff-matrix.md"
 OUTPUT_ROOT = REPO_ROOT / "standalone-skills"
 DEFAULT_VENV_NAME = "research-foundry-standalone"
 COMMANDS_ROOT = REPO_ROOT / "scripts" / "commands"
+TEMPLATES_ROOT = REPO_ROOT / "templates"
 
 SKILL_ORDER = [
     "source-intake",
@@ -459,6 +460,7 @@ def build(output_root: Path) -> None:
         build_skill(skill_name, output_root)
 
     copy_tree(COMMANDS_ROOT, output_root / ".internal" / "research-foundry" / "commands")
+    copy_tree(TEMPLATES_ROOT, output_root / ".internal" / "research-foundry" / "templates")
     shutil.copy2(REPO_ROOT / "requirements.txt", output_root / "requirements.txt")
     write_install_ps1(output_root)
     write_install_sh(output_root)

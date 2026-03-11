@@ -32,4 +32,4 @@
 - 缺少 `paper_id` 时按标题 slug
 - 同组只保留最高分项，其余记录以拒绝项形式保留
 
-更细的字段定义以主仓库的 `docs/data-models.md` 为准；standalone 分发包默认不内置完整契约文档。
+更细的字段定义以项目主文档 [docs/data-models.md](../../../../docs/data-models.md) 为准。
