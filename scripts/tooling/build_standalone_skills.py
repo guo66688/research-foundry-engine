@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / ".agents" / "skills"
 HANDOFF_MATRIX = SKILLS_ROOT / "references" / "handoff-matrix.md"
 OUTPUT_ROOT = REPO_ROOT / "standalone-skills"
+DEFAULT_VENV_NAME = "research-foundry-standalone"
 
 SKILL_ORDER = [
     "source-intake",
@@ -45,6 +46,7 @@ SKILL_SPECS = {
             "## standalone execution\n\n"
             "- This skill bundles its own `scripts/` and can be executed directly inside the skill directory.\n"
             "- It does not depend on external `research-foundry-engine` Python import paths.\n"
+            "- If `.runtime/python.txt` exists, run bundled scripts with the Python executable recorded there.\n"
         ),
         files=(
             _file_spec(
@@ -68,6 +70,7 @@ SKILL_SPECS = {
             "## standalone execution\n\n"
             "- This skill bundles its own `scripts/` and can be executed directly inside the skill directory.\n"
             "- It does not depend on external `research-foundry-engine` Python import paths.\n"
+            "- If `.runtime/python.txt` exists, run bundled scripts with the Python executable recorded there.\n"
         ),
         files=(
             _file_spec(
@@ -85,6 +88,7 @@ SKILL_SPECS = {
             "## standalone execution\n\n"
             "- This skill bundles its own `scripts/` and can be executed directly inside the skill directory.\n"
             "- Figure extraction logic is shipped with the skill and does not depend on external `research-foundry-engine` imports.\n"
+            "- If `.runtime/python.txt` exists, run bundled scripts with the Python executable recorded there.\n"
         ),
         files=(
             _file_spec(
@@ -115,6 +119,7 @@ SKILL_SPECS = {
             "## standalone execution\n\n"
             "- This skill bundles its own `scripts/` and can be executed directly inside the skill directory.\n"
             "- It does not depend on external `research-foundry-engine` Python import paths.\n"
+            "- If `.runtime/python.txt` exists, run bundled scripts with the Python executable recorded there.\n"
         ),
         files=(
             _file_spec(
@@ -144,6 +149,7 @@ SKILL_SPECS = {
             "## standalone execution\n\n"
             "- This skill bundles its own `scripts/` and can be executed directly inside the skill directory.\n"
             "- It does not depend on external `research-foundry-engine` Python import paths.\n"
+            "- If `.runtime/python.txt` exists, run bundled scripts with the Python executable recorded there.\n"
         ),
         files=(
             _file_spec(
@@ -201,6 +207,7 @@ def rewrite_skill_markdown(skill_root: Path, spec: SkillSpec, source_skill_name:
 def write_install_ps1(output_root: Path) -> None:
     content = """param(
     [string]$Destination = "$env:USERPROFILE\\\\.codex\\\\skills",
+    [string]$VenvPath = "$env:USERPROFILE\\\\.codex\\\\venvs\\\\__DEFAULT_VENV_NAME__",
     [string[]]$Skill = @(
         "source-intake",
         "candidate-triage",
@@ -209,12 +216,47 @@ def write_install_ps1(output_root: Path) -> None:
         "run-registry"
     ),
     [switch]$InstallDeps,
-    [string]$PythonExe = "python"
+    [switch]$RecreateVenv,
+    [string]$BootstrapPython = "python"
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+function Get-VenvPythonPath {
+    param([string]$Path)
+    return Join-Path $Path "Scripts\\python.exe"
+}
+
+function Ensure-Venv {
+    param(
+        [string]$Path,
+        [string]$Bootstrap,
+        [switch]$Recreate
+    )
+
+    if ($Recreate -and (Test-Path $Path)) {
+        Remove-Item -Path $Path -Recurse -Force
+    }
+
+    $venvPython = Get-VenvPythonPath -Path $Path
+    if (-not (Test-Path $venvPython)) {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
+        & $Bootstrap -m venv $Path
+        if ($LASTEXITCODE -ne 0) {
+            throw "Virtual environment creation failed."
+        }
+    }
+
+    return $venvPython
+}
+
 New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+$runtimePython = $null
+
+if ($InstallDeps -or (Test-Path (Get-VenvPythonPath -Path $VenvPath)) -or $RecreateVenv) {
+    $runtimePython = Ensure-Venv -Path $VenvPath -Bootstrap $BootstrapPython -Recreate:$RecreateVenv
+}
 
 foreach ($name in $Skill) {
     $source = Join-Path $root $name
@@ -228,16 +270,25 @@ foreach ($name in $Skill) {
     }
 
     Copy-Item -Path $source -Destination $target -Recurse -Force
+    if ($runtimePython) {
+        $runtimeDir = Join-Path $target ".runtime"
+        New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
+        Set-Content -Path (Join-Path $runtimeDir "python.txt") -Value $runtimePython -Encoding utf8
+    }
     Write-Host "Installed $name -> $target"
 }
 
 if ($InstallDeps) {
-    & $PythonExe -m pip install -r (Join-Path $root "requirements.txt")
+    if (-not $runtimePython) {
+        $runtimePython = Ensure-Venv -Path $VenvPath -Bootstrap $BootstrapPython -Recreate:$RecreateVenv
+    }
+    & $runtimePython -m pip install -r (Join-Path $root "requirements.txt")
     if ($LASTEXITCODE -ne 0) {
         throw "Dependency installation failed."
     }
 }
 """
+    content = content.replace("__DEFAULT_VENV_NAME__", DEFAULT_VENV_NAME)
     (output_root / "install-standalone-skills.ps1").write_text(content, encoding="utf-8", newline="\n")
 
 
@@ -247,8 +298,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESTINATION="$HOME/.codex/skills"
+VENV_PATH="$HOME/.codex/venvs/__DEFAULT_VENV_NAME__"
 INSTALL_DEPS=false
-PYTHON_BIN="python"
+RECREATE_VENV=false
+BOOTSTRAP_PYTHON="python"
 SKILLS=()
 
 while [[ $# -gt 0 ]]; do
@@ -257,12 +310,20 @@ while [[ $# -gt 0 ]]; do
       DESTINATION="$2"
       shift 2
       ;;
+    --venv)
+      VENV_PATH="$2"
+      shift 2
+      ;;
     --install-deps)
       INSTALL_DEPS=true
       shift
       ;;
-    --python)
-      PYTHON_BIN="$2"
+    --recreate-venv)
+      RECREATE_VENV=true
+      shift
+      ;;
+    --python|--bootstrap-python)
+      BOOTSTRAP_PYTHON="$2"
       shift 2
       ;;
     --)
@@ -279,6 +340,34 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+venv_python_path() {
+  printf '%s\n' "$1/bin/python"
+}
+
+ensure_venv() {
+  local path="$1"
+  local bootstrap="$2"
+  local venv_python
+  venv_python="$(venv_python_path "$path")"
+
+  if [ "$RECREATE_VENV" = true ] && [ -d "$path" ]; then
+    rm -rf "$path"
+  fi
+
+  if [ ! -x "$venv_python" ]; then
+    mkdir -p "$(dirname "$path")"
+    "$bootstrap" -m venv "$path"
+  fi
+
+  venv_python="$(venv_python_path "$path")"
+  if [ ! -x "$venv_python" ]; then
+    echo "Virtual environment creation failed: $path" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$venv_python"
+}
+
 if [ "${#SKILLS[@]}" -eq 0 ]; then
   SKILLS=(
     "source-intake"
@@ -290,6 +379,11 @@ if [ "${#SKILLS[@]}" -eq 0 ]; then
 fi
 
 mkdir -p "$DESTINATION"
+RUNTIME_PYTHON=""
+
+if [ "$INSTALL_DEPS" = true ] || [ "$RECREATE_VENV" = true ] || [ -x "$(venv_python_path "$VENV_PATH")" ]; then
+  RUNTIME_PYTHON="$(ensure_venv "$VENV_PATH" "$BOOTSTRAP_PYTHON")"
+fi
 
 for name in "${SKILLS[@]}"; do
   SOURCE="$ROOT/$name"
@@ -300,13 +394,21 @@ for name in "${SKILLS[@]}"; do
   fi
   rm -rf "$TARGET"
   cp -R "$SOURCE" "$TARGET"
+  if [ -n "$RUNTIME_PYTHON" ]; then
+    mkdir -p "$TARGET/.runtime"
+    printf '%s\n' "$RUNTIME_PYTHON" > "$TARGET/.runtime/python.txt"
+  fi
   echo "Installed $name -> $TARGET"
 done
 
 if [ "$INSTALL_DEPS" = true ]; then
-  "$PYTHON_BIN" -m pip install -r "$ROOT/requirements.txt"
+  if [ -z "$RUNTIME_PYTHON" ]; then
+    RUNTIME_PYTHON="$(ensure_venv "$VENV_PATH" "$BOOTSTRAP_PYTHON")"
+  fi
+  "$RUNTIME_PYTHON" -m pip install -r "$ROOT/requirements.txt"
 fi
 """
+    content = content.replace("__DEFAULT_VENV_NAME__", DEFAULT_VENV_NAME)
     (output_root / "install-standalone-skills.sh").write_text(content, encoding="utf-8", newline="\n")
 
 

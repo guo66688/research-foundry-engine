@@ -95,3 +95,4 @@ python scripts/flow_triage_rank.py \
 
 - This skill bundles its own `scripts/` and can be executed directly inside the skill directory.
 - It does not depend on external `research-foundry-engine` Python import paths.
+- If `.runtime/python.txt` exists, run bundled scripts with the Python executable recorded there.

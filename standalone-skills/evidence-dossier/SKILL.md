@@ -102,3 +102,4 @@ python scripts/flow_dossier_build.py \
 
 - This skill bundles its own `scripts/` and can be executed directly inside the skill directory.
 - Figure extraction logic is shipped with the skill and does not depend on external `research-foundry-engine` imports.
+- If `.runtime/python.txt` exists, run bundled scripts with the Python executable recorded there.
