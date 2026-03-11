@@ -19,6 +19,7 @@
 - `runtime/artifacts/paper_registry.jsonl`
 - `runtime/artifacts/run_registry.jsonl`
 - `runtime/artifacts/relations.json`
+- `workspace.notes_root/<inbox_dir>/daily-recommendations/YYYY/YYYY-MM-DD-<profile_id>.md`
 
 ## 验证命令
 

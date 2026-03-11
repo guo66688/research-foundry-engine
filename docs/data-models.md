@@ -89,6 +89,22 @@
 - `dedupe_group_id`
 - `reason`
 
+### `YYYY-MM-DD-<profile_id>.md`
+
+这是 triage 阶段衍生出的 Obsidian 日报文档，默认写入：
+
+- `workspace.notes_root/<inbox_dir>/daily-recommendations/YYYY/`
+
+文档建议包含：
+
+- `run_id`
+- `profile_id`
+- `candidate_count`
+- `shortlist_count`
+- Top 5 推荐论文
+- 完整 shortlist
+- 运行产物路径
+
 ### `figure_manifest-<paper_id>.json`
 
 顶层字段：
@@ -161,6 +177,7 @@
 - 图像清单：`figure_manifest-<paper_id>.json`
 - 阅读队列：`reading_queue-<run_id>.md`
 - 单次运行摘要：`run_manifest.json`
+- 每日推荐文档：`YYYY-MM-DD-<profile_id>.md`
 
 ## 枚举值
 

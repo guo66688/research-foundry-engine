@@ -51,6 +51,18 @@ python scripts/triage/flow_triage_rank.py \
 - `runtime/runs/<run_id>/triage_result.json`
 - `runtime/artifacts/reading_queue-<run_id>.md`
 
+如果你要把这次 triage 结果整理成一篇 Obsidian 日报，再执行：
+
+```bash
+python scripts/triage/flow_triage_daily_digest.py \
+  --config configs/workflow.yaml \
+  --triage-file runtime/runs/<run_id>/triage_result.json
+```
+
+产物：
+
+- `workspace.notes_root/<inbox_dir>/daily-recommendations/YYYY/YYYY-MM-DD-<profile_id>.md`
+
 ## 5. 生成单篇 dossier
 
 ```bash

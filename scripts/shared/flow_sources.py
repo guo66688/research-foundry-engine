@@ -75,12 +75,12 @@ def fetch_arxiv_candidates(workflow: Dict[str, Any], profile: Dict[str, Any]) ->
 
     end_date = now_utc()
     start_date = end_date - timedelta(days=lookback_days)
-    category_query = "+OR+".join(f"cat:{category}" for category in categories)
-    date_query = "submittedDate:[{}0000+TO+{}2359]".format(
+    category_query = " OR ".join(f"cat:{category}" for category in categories)
+    date_query = "submittedDate:[{}0000 TO {}2359]".format(
         start_date.strftime("%Y%m%d"),
         end_date.strftime("%Y%m%d"),
     )
-    search_query = f"({category_query})+AND+{date_query}"
+    search_query = f"({category_query}) AND {date_query}"
     payload = _request(
         "https://export.arxiv.org/api/query",
         params={
