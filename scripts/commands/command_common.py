@@ -598,10 +598,10 @@ def resolve_backend(mode: str = "auto") -> Backend:
         if skills_root is None:
             raise RuntimeError("standalone backend requested but installed skills are unavailable")
         return Backend(mode="standalone", repo_root=None, skills_root=skills_root, support_root=current_file.parent)
-    if repo_root is not None:
-        return Backend(mode="external", repo_root=repo_root, skills_root=skills_root, support_root=current_file.parent)
     if skills_root is not None:
         return Backend(mode="standalone", repo_root=None, skills_root=skills_root, support_root=current_file.parent)
+    if repo_root is not None:
+        return Backend(mode="external", repo_root=repo_root, skills_root=skills_root, support_root=current_file.parent)
     raise RuntimeError("no execution backend available")
 
 

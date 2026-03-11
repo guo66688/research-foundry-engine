@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="configs/workflow.yaml", help="Path to workflow config")
     parser.add_argument("--profiles", default="configs/profiles.yaml", help="Path to profiles config")
     parser.add_argument("--profile-id", default="llm_systems", help="Profile identifier")
-    parser.add_argument("--mode", choices=["auto", "external", "standalone"], default="auto", help="Execution backend")
+    parser.add_argument("--mode", choices=["auto", "external", "standalone"], default="standalone", help="Execution backend")
     parser.add_argument("--notes-root", default="", help="Optional notes root override")
     parser.add_argument("--disable-links", action="store_true", help="Skip knowledge synthesis and local linking")
     parser.add_argument("--write-final-markdown", action="store_true", help="Also write the final paper note markdown")

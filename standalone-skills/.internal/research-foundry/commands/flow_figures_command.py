@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Extract figures for one paper and optionally write an index note.")
     parser.add_argument("paper", help="paper_id or title")
     parser.add_argument("--config", default="configs/workflow.yaml", help="Path to workflow config")
-    parser.add_argument("--mode", choices=["auto", "external", "standalone"], default="auto", help="Execution backend")
+    parser.add_argument("--mode", choices=["auto", "external", "standalone"], default="standalone", help="Execution backend")
     parser.add_argument("--notes-root", default="", help="Optional notes root override")
     parser.add_argument("--no-index", action="store_true", help="Do not create a figure index markdown note")
     return parser.parse_args()
