@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+import requests
 import yaml
 
 
@@ -101,6 +102,17 @@ class Backend:
                 return recorded
         return sys.executable
 
+    def template_path(self, template_name: str) -> Path:
+        if self.mode == "external":
+            if self.repo_root is None:
+                raise RuntimeError("external backend missing repo root")
+            path = self.repo_root / "templates" / template_name
+        else:
+            path = self.support_root.parent / "templates" / template_name
+        if not path.exists():
+            raise FileNotFoundError(f"missing template: {path}")
+        return path
+
 
 def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
@@ -114,6 +126,10 @@ def read_text(path: Path) -> str:
 def write_text(path: Path, content: str) -> None:
     ensure_dir(path.parent)
     path.write_text(content, encoding="utf-8")
+
+
+def write_json_file(path: Path, payload: Any) -> None:
+    write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
 
 def read_json(path: Path, default: Any = None) -> Any:
@@ -237,6 +253,280 @@ def evidence_summary(record: Dict[str, Any]) -> str:
     return "；".join(signals) + "。"
 
 
+def split_sentences(text: str) -> List[str]:
+    compact = " ".join(str(text).split())
+    if not compact:
+        return []
+    parts = re.split(r"(?<=[\.\!\?])\s+", compact)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def first_sentence_with_keywords(text: str, keywords: Sequence[str]) -> str:
+    for sentence in split_sentences(text):
+        lowered = normalize_text(sentence)
+        if any(keyword in lowered for keyword in keywords):
+            return sentence.strip()
+    return ""
+
+
+def artifact_label(record: Dict[str, Any]) -> str:
+    title_text = normalize_text(str(record.get("title", "")))
+    abstract_text = normalize_text(str(record.get("abstract", "")))
+    text = f"{title_text}\n{abstract_text}"
+    if "fine-tuning" in title_text or "continual" in title_text or "replay" in title_text or "alignment" in title_text:
+        return "训练/微调型工作"
+    if "retrieval" in title_text or "rag" in title_text or "search" in title_text:
+        return "检索增强型工作"
+    if "ordering" in title_text or "reasoning" in title_text or "planner" in title_text or "planning" in title_text:
+        return "推理/规划型工作"
+    if "framework" in title_text or "platform" in title_text or "system" in title_text or "assistant" in title_text:
+        return "系统/框架型工作"
+    if "dataset" in title_text or "corpus" in title_text or "benchmark" in title_text:
+        return "数据集型工作"
+    if "benchmark" in text or "evaluation" in text or "evaluator" in text:
+        return "评测/基准型工作"
+    if "dataset" in text or "corpus" in text:
+        return "数据集型工作"
+    if "framework" in text or "platform" in text or "system" in text or "assistant" in text:
+        return "系统/框架型工作"
+    if "retrieval" in text or "rag" in text or "search" in text:
+        return "检索增强型工作"
+    if "fine-tuning" in text or "tuning" in text or "continual" in text or "replay" in text or "alignment" in text:
+        return "训练/微调型工作"
+    if "reasoning" in text or "planner" in text or "planning" in text:
+        return "推理/规划型工作"
+    return "方法型工作"
+
+
+def domain_label(record: Dict[str, Any]) -> str:
+    text = normalize_text(f"{record.get('title', '')}\n{record.get('abstract', '')}")
+    if "medical" in text or "clinical" in text:
+        return "医疗场景"
+    if "physics" in text:
+        return "科研知识检索场景"
+    if "political" in text:
+        return "政治风险评估场景"
+    if "cardiac" in text:
+        return "心脏影像场景"
+    if "egocentric" in text or "video" in text:
+        return "视频理解场景"
+    if "spoken" in text or "speech" in text:
+        return "语音交互场景"
+    if "multimodal" in text or "vision-language" in text:
+        return "多模态场景"
+    if "agent" in text:
+        return "Agent 系统场景"
+    if "large language model" in text or "llm" in text:
+        return "大模型系统场景"
+    return "通用 AI 场景"
+
+
+def problem_summary(record: Dict[str, Any], text_context: Optional[Dict[str, Any]] = None) -> str:
+    sections = (text_context or {}).get("sections", {}) if text_context else {}
+    intro_text = "\n".join(
+        filter(
+            None,
+            [
+                sections.get("introduction", ""),
+                sections.get("background", ""),
+                sections.get("motivation", ""),
+            ],
+        )
+    )
+    matched_from_fulltext = sentence_with_keywords(
+        intro_text,
+        ["challenge", "problem", "limited", "lack", "hinder", "suffer", "fragility", "gap"],
+    )
+    if matched_from_fulltext:
+        return f"从正文前半部分看，作者首先强调的瓶颈是：{abstract_snapshot(matched_from_fulltext, length=180)}"
+    abstract = str(record.get("abstract", ""))
+    text = normalize_text(abstract)
+    if "lack of standardized" in text or "lack of standard" in text:
+        return "作者认为当前方向的主要问题是缺少统一标准，导致不同方法难以直接比较。"
+    if "fragment" in text or "heterogeneous" in text or "non-uniform" in text:
+        return "作者试图解决现有方案碎片化、数据或流程不统一的问题。"
+    if "cost-performance trade-offs" in text or "trade-off" in text:
+        return "论文关心的不只是性能，还包括性能与成本之间的实际权衡。"
+    if "long-context" in text or "long context" in text:
+        return "论文聚焦长上下文条件下的信息组织与推理稳定性问题。"
+    if "retrieval" in text or "knowledge retrieval" in text:
+        return "论文试图解决知识获取和外部信息接入效率不足的问题。"
+    if "continual" in text or "catastrophic forgetting" in text or "replay" in text:
+        return "论文关注持续学习中的遗忘、数据选择或训练稳定性问题。"
+    matched = first_sentence_with_keywords(
+        abstract,
+        ["challenge", "problem", "limited", "lack", "hinder", "suffer", "fragility", "gap"],
+    )
+    if matched:
+        return f"从摘要看，作者首先指出了一个现实瓶颈：{abstract_snapshot(matched, length=140)}"
+    first = split_sentences(abstract)
+    if first:
+        return f"从摘要开头看，论文首先在界定问题背景：{abstract_snapshot(first[0], length=140)}"
+    return "摘要没有明显展开问题背景，建议通读引言确认作者想解决的核心瓶颈。"
+
+
+def feature_bullets(record: Dict[str, Any]) -> List[str]:
+    text = normalize_text(f"{record.get('title', '')}\n{record.get('abstract', '')}")
+    features: List[str] = []
+    if "protocol" in text or "communication" in text:
+        features.append("定义了更统一的交互或通信方式，方便把不同模块接到同一流程里。")
+    if "framework" in text or "platform" in text or "system" in text:
+        features.append("提供了一个可复用的系统框架或实验平台，而不是只给单点技巧。")
+    if "benchmark" in text or "benchmarking" in text or "dataset" in text:
+        features.append("把任务、数据或评价标准整理成可复用的基准，便于横向比较。")
+    if "evaluator" in text or "evaluation" in text:
+        features.append("设计了自动化评估或验证流程，重点不只是提出方法，也包括如何可靠地测。")
+    if "retrieval" in text or "rag" in text or "knowledge retrieval" in text:
+        features.append("核心路径包含检索或知识接入，强调把外部信息有效接入系统。")
+    if "memory" in text:
+        features.append("显式处理记忆或历史信息，重点改善跨轮次或跨阶段的信息保留。")
+    if "ordering" in text or "planner" in text or "planning" in text:
+        features.append("重点优化步骤编排或推理顺序，属于流程组织能力的改进。")
+    if "fine-tuning" in text or "continual" in text or "replay" in text or "alignment" in text:
+        features.append("方法上更偏训练策略或调优机制，而不是单纯换模型。")
+    if "ablation" in text:
+        features.append("摘要明确提到消融，说明作者有在拆解关键机制是否真的有效。")
+    return features[:3]
+
+
+def method_summary(record: Dict[str, Any], text_context: Optional[Dict[str, Any]] = None) -> str:
+    sections = (text_context or {}).get("sections", {}) if text_context else {}
+    method_text = "\n".join(
+        filter(
+            None,
+            [
+                sections.get("method", ""),
+                sections.get("methods", ""),
+                sections.get("approach", ""),
+                sections.get("framework", ""),
+                sections.get("system", ""),
+                sections.get("architecture", ""),
+            ],
+        )
+    )
+    matched_from_fulltext = sentence_with_keywords(
+        method_text,
+        ["we propose", "we present", "we introduce", "our method", "our framework", "our system"],
+    )
+    if matched_from_fulltext:
+        return f"正文里的方法主线可以概括为：{abstract_snapshot(matched_from_fulltext, length=180)}"
+    features = feature_bullets(record)
+    if features:
+        return features[0]
+    abstract = str(record.get("abstract", ""))
+    matched = first_sentence_with_keywords(
+        abstract,
+        ["we present", "we propose", "we introduce", "we develop", "we provide", "this paper"],
+    )
+    if matched:
+        return f"摘要中的方法主句是：{abstract_snapshot(matched, length=160)}"
+    return contribution_summary(record)
+
+
+def results_summary(record: Dict[str, Any], text_context: Optional[Dict[str, Any]] = None) -> str:
+    sections = (text_context or {}).get("sections", {}) if text_context else {}
+    result_text = "\n".join(
+        filter(
+            None,
+            [
+                sections.get("experiment", ""),
+                sections.get("experiments", ""),
+                sections.get("evaluation", ""),
+                sections.get("results", ""),
+                sections.get("analysis", ""),
+                sections.get("conclusion", ""),
+            ],
+        )
+    )
+    matched_from_fulltext = sentence_with_keywords(
+        result_text,
+        ["outperform", "improve", "better", "gain", "reveal", "show", "trade-off"],
+    )
+    if matched_from_fulltext:
+        return f"从正文实验和结论部分看，作者最想强调的是：{abstract_snapshot(matched_from_fulltext, length=200)}"
+    abstract = str(record.get("abstract", ""))
+    text = normalize_text(abstract)
+    parts: List[str] = []
+    if "benchmark" in text or "experiments" in text or "evaluation" in text:
+        parts.append("论文给出了实验或基准验证，不只是概念性提案。")
+    if "ablation" in text:
+        parts.append("作者做了消融或机制拆解，便于判断哪些设计真的起作用。")
+    if "outperform" in text or "improves" in text or "improvement" in text or "better than" in text:
+        parts.append("摘要声称相比基线有性能提升，但具体幅度仍需回到正文核对。")
+    if "trade-off" in text or "cost" in text:
+        parts.append("结果不仅看效果，也在讨论成本或效率权衡。")
+    if "reveal" in text or "shows that" in text or "our evaluation reveals" in text:
+        parts.append("除了报分，论文还试图总结某类系统在什么条件下会失效或表现不稳。")
+    if parts:
+        return " ".join(parts)
+    return "摘要里的结果信号不算弱，但更像方向性结论，是否稳健还要结合实验部分细看。"
+
+
+def audience_summary(record: Dict[str, Any]) -> str:
+    artifact = artifact_label(record)
+    if artifact == "评测/基准型工作":
+        return "适合想搭评测协议、比较不同方案，或判断这个方向到底该怎么测的人先看。"
+    if artifact == "数据集型工作":
+        return "适合想找任务设置、数据资源或 benchmark 入口的人先看。"
+    if artifact == "系统/框架型工作":
+        return "适合想看系统怎么搭、模块怎么拼、工程边界怎么划分的人先看。"
+    if artifact == "检索增强型工作":
+        return "适合关心知识接入、检索链路和问答系统落地方式的人先看。"
+    if artifact == "训练/微调型工作":
+        return "适合关心训练策略、数据选择、稳定性和持续学习问题的人先看。"
+    if artifact == "推理/规划型工作":
+        return "适合关心推理链路、上下文组织和多步决策的人先看。"
+    return "适合作为当前方向的近期样本来快速补齐认知。"
+
+
+def recommendation_summary(record: Dict[str, Any]) -> str:
+    reasons = profile_reasons(record)
+    method_summary_text = method_signal_summary(record).rstrip("。")
+    domain = domain_label(record)
+    artifact = artifact_label(record)
+    core = reasons[0] if reasons else "与当前画像存在一定关系"
+    return f"{core}；论文本身属于{domain}中的{artifact}，而且{method_summary_text}。"
+
+
+def paper_glance(record: Dict[str, Any]) -> str:
+    domain = domain_label(record)
+    artifact = artifact_label(record)
+    topics = detect_topics(record)
+    topic_text = " / ".join(topics[:2]) if topics else "当前研究方向"
+    if artifact == "评测/基准型工作":
+        focus = "重点在怎么把任务、指标和比较方式整理成可复用的评测方案"
+    elif artifact == "数据集型工作":
+        focus = "重点在任务设置、数据覆盖范围以及后续能否成为公共入口"
+    elif artifact == "系统/框架型工作":
+        focus = "重点在系统组织方式、模块协作和整体工作流设计"
+    elif artifact == "检索增强型工作":
+        focus = "重点在如何把检索或外部知识真正接进系统"
+    elif artifact == "训练/微调型工作":
+        focus = "重点在训练策略、调优机制和稳定性改进"
+    elif artifact == "推理/规划型工作":
+        focus = "重点在推理顺序、上下文组织和决策流程"
+    else:
+        focus = "重点在提出新的方法思路并验证其有效性"
+    return f"面向{domain}，这篇更像一项{artifact}；主题靠近 {topic_text}，{focus}。"
+
+
+def reading_focus_summary(record: Dict[str, Any]) -> str:
+    artifact = artifact_label(record)
+    if artifact == "评测/基准型工作":
+        return "建议先看 benchmark 覆盖范围、评测协议和 baseline 是否公平。"
+    if artifact == "数据集型工作":
+        return "建议先看任务定义、数据规模和数据分布是否真的补上了现有空缺。"
+    if artifact == "系统/框架型工作":
+        return "建议先看系统结构图、模块边界，以及作者到底统一了哪些原本分散的流程。"
+    if artifact == "检索增强型工作":
+        return "建议先看检索来源、召回方式，以及检索和生成是如何耦合的。"
+    if artifact == "训练/微调型工作":
+        return "建议先看训练目标、数据选择策略和与基线相比提升是否稳定。"
+    if artifact == "推理/规划型工作":
+        return "建议先看推理流程、排序/规划机制和失败案例。"
+    return "建议先看方法主线，再回到实验确认作者声称的提升是否成立。"
+
+
 def method_signal_summary(record: Dict[str, Any]) -> str:
     scores = record.get("score_breakdown") or record.get("scores", {}).get("components", {})
     freshness = float(scores.get("freshness", 0.0) or 0.0)
@@ -323,6 +613,10 @@ def runtime_artifact_root(workflow: Dict[str, Any]) -> Path:
     return Path(workflow.get("runtime", {}).get("artifact_dir", "runtime/artifacts"))
 
 
+def runtime_cache_root(workflow: Dict[str, Any]) -> Path:
+    return Path(workflow.get("runtime", {}).get("cache_dir", "runtime/cache"))
+
+
 def resolve_notes_root(workflow: Dict[str, Any], override: str = "") -> Path:
     return Path(override) if override else Path(workflow.get("workspace", {}).get("notes_root", "."))
 
@@ -342,6 +636,18 @@ def paper_image_dir(notes_root: Path, paper_id: str) -> Path:
 
 def image_index_path(notes_root: Path, paper_id: str) -> Path:
     return notes_root / "research" / "papers" / f"{paper_id}-figures.md"
+
+
+def paper_text_artifact_path(workflow: Dict[str, Any], paper_id: str) -> Path:
+    return runtime_artifact_root(workflow) / f"paper_text-{paper_id}.txt"
+
+
+def deepread_context_path(workflow: Dict[str, Any], paper_id: str) -> Path:
+    return runtime_artifact_root(workflow) / f"deepread_context-{paper_id}.json"
+
+
+def daily_context_path(workflow: Dict[str, Any], run_id: str) -> Path:
+    return runtime_artifact_root(workflow) / f"daily_context-{run_id}.json"
 
 
 def list_recent_runs(run_root: Path) -> List[Path]:
@@ -565,6 +871,128 @@ def abstract_snapshot(text: str, length: int = 520) -> str:
     return compact[: length - 3].rstrip() + "..."
 
 
+def _require_fitz():
+    try:
+        import fitz  # type: ignore
+    except ModuleNotFoundError as error:
+        raise RuntimeError("PyMuPDF is required for full-text extraction.") from error
+    return fitz
+
+
+def cached_pdf_path(workflow: Dict[str, Any], paper_id: str) -> Path:
+    return runtime_cache_root(workflow) / "pdfs" / f"{paper_id}.pdf"
+
+
+def fetch_pdf(record: Dict[str, Any], workflow: Dict[str, Any]) -> Optional[Path]:
+    paper_id = canonical_paper_id(str(record.get("paper_id", "")))
+    target = cached_pdf_path(workflow, paper_id)
+    if target.exists() and target.stat().st_size > 0:
+        return target
+    pdf_url = str(record.get("pdf_url", "")).strip()
+    if not pdf_url and paper_id:
+        pdf_url = f"https://arxiv.org/pdf/{paper_id}.pdf"
+    if not pdf_url:
+        return None
+    timeout = int(workflow.get("runtime", {}).get("request_timeout_seconds", 20))
+    retry_limit = int(workflow.get("runtime", {}).get("retry_limit", 3))
+    last_error: Optional[Exception] = None
+    for _ in range(max(retry_limit, 1)):
+        try:
+            response = requests.get(pdf_url, timeout=timeout)
+            response.raise_for_status()
+            ensure_dir(target.parent)
+            target.write_bytes(response.content)
+            return target
+        except Exception as error:
+            last_error = error
+    if last_error is not None:
+        raise RuntimeError(f"failed to download pdf: {pdf_url}") from last_error
+    return None
+
+
+def extract_pdf_text(pdf_path: Path) -> str:
+    fitz = _require_fitz()
+    document = fitz.open(pdf_path)
+    pages: List[str] = []
+    try:
+        for page in document:
+            pages.append(page.get_text("text"))
+    finally:
+        document.close()
+    return "\n".join(pages)
+
+
+def normalize_heading(text: str) -> str:
+    return re.sub(r"[^a-z]+", "", normalize_text(text))
+
+
+def section_map_from_text(text: str) -> Dict[str, str]:
+    known = {
+        "abstract",
+        "introduction",
+        "background",
+        "motivation",
+        "relatedwork",
+        "method",
+        "methods",
+        "approach",
+        "framework",
+        "system",
+        "architecture",
+        "experiment",
+        "experiments",
+        "experimentalsetup",
+        "evaluation",
+        "results",
+        "analysis",
+        "discussion",
+        "limitations",
+        "conclusion",
+    }
+    current = "body"
+    buckets: Dict[str, List[str]] = {current: []}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        heading = normalize_heading(re.sub(r"^\d+(\.\d+)*\s*", "", line))
+        if heading in known and len(line) <= 80:
+            current = heading
+            buckets.setdefault(current, [])
+            continue
+        buckets.setdefault(current, []).append(line)
+    return {key: "\n".join(value).strip() for key, value in buckets.items() if value}
+
+
+def sentence_candidates(text: str) -> List[str]:
+    compact = " ".join(text.split())
+    if not compact:
+        return []
+    return [item.strip() for item in re.split(r"(?<=[\.\!\?])\s+", compact) if item.strip()]
+
+
+def sentence_with_keywords(text: str, keywords: Sequence[str]) -> str:
+    for sentence in sentence_candidates(text):
+        lowered = normalize_text(sentence)
+        if any(keyword in lowered for keyword in keywords):
+            return sentence
+    return ""
+
+
+def build_text_context(record: Dict[str, Any], workflow: Dict[str, Any]) -> Dict[str, Any]:
+    paper_id = canonical_paper_id(str(record.get("paper_id", "")))
+    artifact_path = paper_text_artifact_path(workflow, paper_id)
+    if artifact_path.exists():
+        full_text = read_text(artifact_path)
+        return {"path": artifact_path, "text": full_text, "sections": section_map_from_text(full_text)}
+    pdf_path = fetch_pdf(record, workflow)
+    if pdf_path is None:
+        return {"path": None, "text": "", "sections": {}}
+    full_text = extract_pdf_text(pdf_path)
+    write_text(artifact_path, full_text)
+    return {"path": artifact_path, "text": full_text, "sections": section_map_from_text(full_text)}
+
+
 def render_paper_note(
     record: Dict[str, Any],
     notes_root: Path,
@@ -572,6 +1000,7 @@ def render_paper_note(
     related_notes: List[Dict[str, Any]],
     synthesis_report_path: Optional[Path],
     dossier_path: Optional[Path],
+    text_context: Optional[Dict[str, Any]] = None,
 ) -> str:
     paper_id = canonical_paper_id(str(record.get("paper_id", "")))
     title = str(record.get("title", paper_id))
@@ -620,42 +1049,39 @@ def render_paper_note(
         "",
         abstract_snapshot(str(record.get("abstract", "")), length=1400),
         "",
-        "## 中文解读",
+        "## 一句话概览",
         "",
-        f"- 主题判断：{' / '.join(topics[:2])}",
-        f"- {contribution_summary(record)}",
-        f"- {evidence_summary(record)}",
+        f"- {paper_glance(record)}",
+        f"- 适合谁先看：{audience_summary(record)}",
         "",
-        "## 研究背景与动机",
+        "## 这篇在解决什么问题",
         "",
-        "这篇工作试图解决当前方向中的具体瓶颈，是否真正抓住主问题，仍建议结合正文引言继续确认。",
+        problem_summary(record, text_context),
         "",
-        "## 方法概述",
-        "",
-        contribution_summary(record),
-        "",
-        "## 实验与结果",
-        "",
-        evidence_summary(record),
-        "",
-        "## 研究价值评估",
+        "## 它大概是怎么做的",
         "",
     ]
-    for reason in profile_reasons(record):
-        lines.append(f"- {reason}")
-    lines.append(f"- {method_signal_summary(record)}")
+    for item in feature_bullets(record):
+        lines.append(f"- {item}")
+    if not feature_bullets(record):
+        lines.append(f"- {method_summary(record, text_context)}")
     lines.extend(
         [
             "",
-            "## 优势",
+            "## 结果与结论怎么看",
             "",
-            "- 主题方向明确，容易判断与当前画像的关系。",
-            "- 摘要中提供了一定的方法或实验信号，值得进入精读候选。",
+            results_summary(record, text_context),
             "",
-            "## 局限",
+            "## 为什么值得现在读",
             "",
-            "- 当前笔记仍主要依据标题、摘要和 triage 信号，尚未替代通读正文。",
-            "- 如果论文很新，影响力和复现稳定性仍需后续观察。",
+            f"- {recommendation_summary(record)}",
+            f"- {evidence_summary(record)}",
+            f"- {reading_focus_summary(record)}",
+            "",
+            "## 阅读提示",
+            "",
+            "- 这份笔记优先结合正文文本、标题、摘要、triage 信号和本地链接结果生成，但仍不能替代完整通读。",
+            "- 如果这篇论文非常新，影响力和可复现性往往还没有稳定显现，建议把实验和附录一起核对。",
             "",
             "## 相关笔记",
             "",
@@ -675,7 +1101,31 @@ def render_paper_note(
     lines.extend(["", "## 运行痕迹", ""])
     if dossier_path is not None:
         lines.append(f"- dossier：`{dossier_path}`")
+    if text_context and text_context.get("path") is not None:
+        lines.append(f"- full_text：`{text_context['path']}`")
     return "\n".join(lines).strip() + "\n"
+
+
+def shortlist_theme_lines(selected: Sequence[Dict[str, Any]]) -> List[str]:
+    counts: Dict[str, int] = {}
+    for item in selected:
+        for topic in detect_topics(item):
+            counts[topic] = counts.get(topic, 0) + 1
+    ranked = sorted(counts.items(), key=lambda pair: pair[1], reverse=True)
+    if not ranked:
+        return ["- 本次 shortlist 没有明显主题集中趋势。"]
+    lines = []
+    for topic, count in ranked[:3]:
+        lines.append(f"- `{topic}`：在 shortlist 中出现 {count} 次。")
+    return lines
+
+
+def daily_item_brief(record: Dict[str, Any]) -> str:
+    return f"{paper_glance(record)} {method_summary(record)}"
+
+
+def daily_item_reason(record: Dict[str, Any]) -> str:
+    return recommendation_summary(record)
 
 
 def render_daily_note(
@@ -709,9 +1159,11 @@ def render_daily_note(
         f"- 候选总数：`{triage_payload.get('stats', {}).get('input_count', 0)}`",
         f"- shortlist：`{triage_payload.get('stats', {}).get('selected_count', 0)}`",
         "",
-        "## Source 状态",
+        "## 今天主要在看什么",
         "",
     ]
+    lines.extend(shortlist_theme_lines(selected))
+    lines.extend(["", "## Source 状态", ""])
     source_status = manifest_payload.get("source_status", {}) or {}
     if source_status:
         for source_name, payload in source_status.items():
@@ -735,7 +1187,10 @@ def render_daily_note(
                 f"- paper_id：`{item.get('paper_id', '')}`",
                 f"- score：`{item.get('scores', {}).get('total', item.get('score', 'n/a'))}`",
                 f"- tier：`{item.get('tier', '')}`",
-                f"- 推荐理由：{'; '.join(profile_reasons(item))} {method_signal_summary(item)}",
+                f"- 研究概览：{daily_item_brief(item)}",
+                f"- 建议先看：{reading_focus_summary(item)}",
+                f"- 适合谁先看：{audience_summary(item)}",
+                f"- 为什么入选：{daily_item_reason(item)}",
                 "",
             ]
         )
@@ -748,6 +1203,99 @@ def render_daily_note(
     else:
         lines.append("- 本次未生成深读笔记。")
     return "\n".join(lines).strip() + "\n"
+
+
+def prepare_today_materials(
+    backend: Backend,
+    workflow: Dict[str, Any],
+    config_path: Path,
+    profiles_path: Path,
+    profile_id: str,
+    notes_root: Path,
+    intake: Dict[str, Any],
+    triage: Dict[str, Any],
+    triage_payload: Dict[str, Any],
+    manifest_payload: Dict[str, Any],
+    top_deepreads: int = 3,
+) -> Dict[str, Any]:
+    selected = list(triage_payload.get("selected", []))
+    prepared_deepreads: List[Dict[str, Any]] = []
+    for record in selected[: max(top_deepreads, 0)]:
+        bundle = dict(record)
+        bundle["_triage_file"] = str(triage["triage_result"])
+        bundle["_candidate_file"] = str(intake["candidate_pool"])
+        bundle["_run_id"] = str(triage_payload.get("run_id", ""))
+        prepared = prepare_deepread_materials(
+            backend,
+            workflow,
+            config_path,
+            profiles_path,
+            profile_id,
+            notes_root,
+            bundle,
+            enable_links=True,
+        )
+        prepared_deepreads.append(
+            {
+                "paper_id": bundle.get("paper_id", ""),
+                "title": bundle.get("title", ""),
+                "target_note_path": str(prepared["note_path"]),
+                "context_path": str(prepared["context_path"]),
+                "template_path": str(prepared["template_path"]),
+                "dossier_path": str(prepared["dossier_path"]),
+                "synthesis_report_path": str(prepared["synthesis_report_path"] or ""),
+                "full_text_path": str(prepared["full_text_path"] or ""),
+                "figure_paths": [str(item.get("path", "")) for item in prepared["copied_figures"]],
+            }
+        )
+
+    run_id = str(triage_payload.get("run_id", ""))
+    target_daily_path = daily_note_path(notes_root, profile_id, str(triage_payload.get("generated_at", "")))
+    template_path = backend.template_path("daily-recommendation-template.md")
+    context_path = daily_context_path(workflow, run_id)
+    shortlist_payload = []
+    for item in selected[:10]:
+        shortlist_payload.append(
+            {
+                "paper_id": item.get("paper_id", ""),
+                "title": item.get("title", ""),
+                "tier": item.get("tier", ""),
+                "scores": item.get("scores", {}),
+                "score_breakdown": item.get("score_breakdown", {}),
+                "profile_hits": list(item.get("profile_hits", [])),
+                "decision_reasons": item.get("decision_reasons", []),
+                "abstract": item.get("abstract", ""),
+                "categories": list(item.get("categories", [])),
+                "published_at": item.get("published_at", ""),
+                "source_url": item.get("source_url", ""),
+                "pdf_url": item.get("pdf_url", ""),
+            }
+        )
+    context_payload = {
+        "kind": "daily_recommendation_context",
+        "run_id": run_id,
+        "profile_id": profile_id,
+        "template_path": str(template_path),
+        "target_note_path": str(target_daily_path),
+        "candidate_pool_path": str(intake["candidate_pool"]),
+        "triage_result_path": str(triage["triage_result"]),
+        "reading_queue_path": str(triage["reading_queue"]) if triage.get("reading_queue") else "",
+        "manifest_path": str(intake["candidate_pool"].parent / "run_manifest.json"),
+        "generated_at": str(triage_payload.get("generated_at", "")),
+        "candidate_count": triage_payload.get("stats", {}).get("input_count", 0),
+        "shortlist_count": triage_payload.get("stats", {}).get("selected_count", 0),
+        "source_status": manifest_payload.get("source_status", {}),
+        "warnings": list(manifest_payload.get("warnings", []) or []),
+        "shortlist": shortlist_payload,
+        "top_deepreads": prepared_deepreads,
+    }
+    write_json_file(context_path, context_payload)
+    return {
+        "context_path": context_path,
+        "template_path": template_path,
+        "target_note_path": target_daily_path,
+        "prepared_deepreads": prepared_deepreads,
+    }
 
 
 def run_source_intake(backend: Backend, config_path: Path, profiles_path: Path, profile_id: str) -> Dict[str, Any]:
@@ -873,7 +1421,7 @@ def run_figure_extraction(backend: Backend, workflow: Dict[str, Any], record: Di
     return {"manifest_path": manifest_path, "manifest": read_json(manifest_path, default={}) or {}, "raw_output": output}
 
 
-def build_deepread_note(
+def prepare_deepread_materials(
     backend: Backend,
     workflow: Dict[str, Any],
     config_path: Path,
@@ -887,6 +1435,10 @@ def build_deepread_note(
     dossier_path = dossier_result["dossier_path"]
     if dossier_path is None:
         raise RuntimeError("dossier output missing")
+    try:
+        text_context = build_text_context(record, workflow)
+    except RuntimeError:
+        text_context = {"path": None, "text": "", "sections": {}}
 
     figure_manifest: Dict[str, Any] = {}
     try:
@@ -923,17 +1475,96 @@ def build_deepread_note(
         synthesis_result = run_synthesis(backend, config_path, dossier_path, notes_root)
         synthesis_path = synthesis_result.get("report_path")
 
-    write_text(
-        note_path,
-        render_paper_note(record, notes_root, copied_figures, related_notes, synthesis_path, dossier_path),
-    )
+    template_path = backend.template_path("deepread-note-template.md")
+    context_path = deepread_context_path(workflow, canonical_paper_id(str(record.get("paper_id", ""))))
+    related_payload = []
+    for item in related_notes:
+        related_payload.append(
+            {
+                "title": item.get("title", ""),
+                "path": str(item.get("path", "")),
+                "vault_link": markdown_link(Path(str(item["path"])), notes_root),
+                "score": item.get("score", 0),
+                "overlaps": list(item.get("overlaps", [])),
+            }
+        )
+    context_payload = {
+        "kind": "deepread_context",
+        "profile_id": profile_id,
+        "paper_id": canonical_paper_id(str(record.get("paper_id", ""))),
+        "title": record.get("title", ""),
+        "target_note_path": str(note_path),
+        "template_path": str(template_path),
+        "notes_root": str(notes_root),
+        "dossier_path": str(dossier_path),
+        "synthesis_report_path": str(synthesis_path) if synthesis_path else "",
+        "full_text_path": str(text_context.get("path")) if text_context.get("path") else "",
+        "figure_paths": [str(item.get("path", "")) for item in copied_figures],
+        "related_notes": related_payload,
+        "record": {
+            "paper_id": record.get("paper_id", ""),
+            "title": record.get("title", ""),
+            "abstract": record.get("abstract", ""),
+            "authors": list(record.get("authors", [])),
+            "published_at": record.get("published_at", ""),
+            "categories": list(record.get("categories", [])),
+            "source": record.get("source", ""),
+            "source_url": record.get("source_url", ""),
+            "pdf_url": record.get("pdf_url", ""),
+            "profile_hits": list(record.get("profile_hits", [])),
+            "scores": record.get("scores", {}),
+            "score_breakdown": record.get("score_breakdown", {}),
+            "tier": record.get("tier", ""),
+            "decision_reasons": record.get("decision_reasons", []),
+        },
+    }
+    write_json_file(context_path, context_payload)
     return {
         "note_path": note_path,
         "dossier_path": dossier_path,
         "synthesis_report_path": synthesis_path,
         "copied_figures": copied_figures,
         "related_notes": related_notes,
+        "full_text_path": text_context.get("path"),
+        "text_context": text_context,
+        "context_path": context_path,
+        "template_path": template_path,
     }
+
+
+def build_deepread_note(
+    backend: Backend,
+    workflow: Dict[str, Any],
+    config_path: Path,
+    profiles_path: Path,
+    profile_id: str,
+    notes_root: Path,
+    record: Dict[str, Any],
+    enable_links: bool = True,
+) -> Dict[str, Any]:
+    result = prepare_deepread_materials(
+        backend,
+        workflow,
+        config_path,
+        profiles_path,
+        profile_id,
+        notes_root,
+        record,
+        enable_links=enable_links,
+    )
+    write_text(
+        result["note_path"],
+        render_paper_note(
+            record,
+            notes_root,
+            result["copied_figures"],
+            result["related_notes"],
+            result["synthesis_report_path"],
+            result["dossier_path"],
+            result.get("text_context"),
+        ),
+    )
+    return result
 
 
 def console_summary(title: str, rows: Sequence[str]) -> str:

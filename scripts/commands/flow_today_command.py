@@ -8,6 +8,7 @@ from command_common import (
     console_summary,
     daily_note_path,
     load_yaml,
+    prepare_today_materials,
     read_json,
     render_daily_note,
     resolve_backend,
@@ -19,7 +20,7 @@ from command_common import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run intake, triage, daily note rendering, and top-3 deep reads.")
+    parser = argparse.ArgumentParser(description="Prepare daily recommendation materials; final Markdown is normally written by Codex.")
     parser.add_argument("--config", default="configs/workflow.yaml", help="Path to workflow config")
     parser.add_argument("--profiles", default="configs/profiles.yaml", help="Path to profiles config")
     parser.add_argument("--profile-id", default="llm_systems", help="Profile identifier")
@@ -27,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--notes-root", default="", help="Optional notes root override")
     parser.add_argument("--top-deepreads", type=int, default=3, help="How many shortlisted papers to deep-read")
     parser.add_argument("--reuse-run-id", default="", help="Reuse an existing run directory instead of fetching again")
+    parser.add_argument("--write-final-markdown", action="store_true", help="Also write the final daily note and deepread markdown files")
     return parser.parse_args()
 
 
@@ -50,28 +52,41 @@ def main() -> int:
         triage = run_candidate_triage(backend, config_path, profiles_path, args.profile_id, intake["candidate_pool"])
     triage_payload = read_json(triage["triage_result"], default={}) or {}
     manifest_payload = read_json(intake["candidate_pool"].parent / "run_manifest.json", default={}) or {}
+    prepared = prepare_today_materials(
+        backend,
+        workflow,
+        config_path,
+        profiles_path,
+        args.profile_id,
+        notes_root,
+        intake,
+        triage,
+        triage_payload,
+        manifest_payload,
+        top_deepreads=args.top_deepreads,
+    )
 
-    selected = list(triage_payload.get("selected", []))
-    top3_notes = []
-    for record in selected[: max(args.top_deepreads, 0)]:
-        bundle = dict(record)
-        bundle["_triage_file"] = str(triage["triage_result"])
-        bundle["_candidate_file"] = str(intake["candidate_pool"])
-        bundle["_run_id"] = str(triage_payload.get("run_id", ""))
-        deepread = build_deepread_note(
-            backend,
-            workflow,
-            config_path,
-            profiles_path,
-            args.profile_id,
-            notes_root,
-            bundle,
-            enable_links=True,
-        )
-        top3_notes.append({"title": str(record.get("title", "")), "note_path": deepread["note_path"]})
-
-    daily_path = daily_note_path(notes_root, args.profile_id, str(triage_payload.get("generated_at", "")))
-    write_text(daily_path, render_daily_note(manifest_payload, triage_payload, top3_notes, notes_root))
+    if args.write_final_markdown:
+        selected = list(triage_payload.get("selected", []))
+        top3_notes = []
+        for record in selected[: max(args.top_deepreads, 0)]:
+            bundle = dict(record)
+            bundle["_triage_file"] = str(triage["triage_result"])
+            bundle["_candidate_file"] = str(intake["candidate_pool"])
+            bundle["_run_id"] = str(triage_payload.get("run_id", ""))
+            deepread = build_deepread_note(
+                backend,
+                workflow,
+                config_path,
+                profiles_path,
+                args.profile_id,
+                notes_root,
+                bundle,
+                enable_links=True,
+            )
+            top3_notes.append({"title": str(record.get("title", "")), "note_path": deepread["note_path"]})
+        daily_path = daily_note_path(notes_root, args.profile_id, str(triage_payload.get("generated_at", "")))
+        write_text(daily_path, render_daily_note(manifest_payload, triage_payload, top3_notes, notes_root))
 
     print(
         console_summary(
@@ -81,9 +96,13 @@ def main() -> int:
                 f"run_id={triage_payload.get('run_id', '')}",
                 f"candidate_pool={intake['candidate_pool']}",
                 f"triage_result={triage['triage_result']}",
-                f"daily_note={daily_path}",
+                f"daily_context={prepared['context_path']}",
+                f"daily_template={prepared['template_path']}",
+                f"target_daily_note={prepared['target_note_path']}",
+                f"top_deepread_count={len(prepared['prepared_deepreads'])}",
                 f"candidate_count={triage_payload.get('stats', {}).get('input_count', 0)}",
                 f"shortlist_count={triage_payload.get('stats', {}).get('selected_count', 0)}",
+                f"final_markdown_written={'yes' if args.write_final_markdown else 'no'}",
             ],
         ),
         end="",
