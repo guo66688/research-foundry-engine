@@ -1,35 +1,99 @@
 # 运行与产物
 
-## 运行目录
+这份文档同时说明两件事：
 
-- `runtime/runs/<run_id>/`：单次运行的中间文件与 run manifest
-- `runtime/artifacts/`：稳定保留的产物
-- `runtime/cache/`：可丢弃的缓存
-- `runtime/logs/`：日志输出
+- Vault 中应该出现什么
+- runtime 区域应该出现什么
 
-## 一次典型运行会产出什么
+## Vault 与 runtime 的边界
+
+### Vault 中允许出现
+
+- 每日推荐 Markdown
+- 单篇深读 Markdown
+- 图片索引 Markdown
+- 论文图片
+- `configs/*.yaml`
+- `AGENTS.md`
+
+### Vault 中不应出现
+
+- `candidate_pool.jsonl`
+- `triage_result.json`
+- `run_manifest.json`
+- `relations.json`
+- `paper_registry.jsonl`
+- `run_registry.jsonl`
+- `cache/`
+- `logs/`
+
+### runtime 中保存
+
+- `runtime/runs/<run_id>/`
+- `runtime/artifacts/`
+- `runtime/cache/`
+- `runtime/logs/`
+
+## 命令层产物
+
+### `今日推荐`
+
+会产出：
 
 - `runtime/runs/<run_id>/candidate_pool.jsonl`
 - `runtime/runs/<run_id>/triage_result.json`
 - `runtime/runs/<run_id>/run_manifest.json`
 - `runtime/artifacts/reading_queue-<run_id>.md`
-- `runtime/artifacts/dossier-<paper_id>-<slug>.md`
-- `runtime/artifacts/figure_manifest-<paper_id>.json`
-- `runtime/artifacts/synthesis_report-<paper_id>.md`
-- `runtime/artifacts/paper_registry.jsonl`
-- `runtime/artifacts/run_registry.jsonl`
-- `runtime/artifacts/relations.json`
 - `workspace.notes_root/<inbox_dir>/daily-recommendations/YYYY/YYYY-MM-DD-<profile_id>.md`
+- `workspace.notes_root/research/papers/<paper_id>.md`
+- `workspace.notes_root/research/papers/<paper_id>/images/`
 
-## 验证命令
+### `深读论文`
 
-脚本语法检查：
+会产出：
+
+- `runtime/artifacts/dossier-<paper_id>-<slug>.md`
+- 可选 `runtime/artifacts/figure_manifest-<paper_id>.json`
+- 可选 `runtime/artifacts/synthesis_report-<paper_id>.md`
+- `workspace.notes_root/research/papers/<paper_id>.md`
+- `workspace.notes_root/research/papers/<paper_id>/images/`
+
+### `提取配图`
+
+会产出：
+
+- 可选 `runtime/artifacts/figure_manifest-<paper_id>.json`
+- `workspace.notes_root/research/papers/<paper_id>/images/`
+- 可选 `workspace.notes_root/research/papers/<paper_id>-figures.md`
+
+### `搜索论文`
+
+默认不写文件，只在控制台返回结果。
+
+## standalone 安装位置
+
+推荐默认路径：
+
+- skills：`~/.codex/skills/`
+- 内部命令支持层：`~/.codex/skills/.internal/research-foundry/commands/`
+- 虚拟环境：`~/.codex/venvs/research-foundry-standalone`
+
+每个 standalone skill 会记录自己的运行 Python：
+
+- `.runtime/python.txt`
+
+这样安装和执行可以绑定到同一个解释器。
+
+## external 调试入口
 
 ```bash
-python -m compileall scripts
+python scripts/commands/flow_today_command.py --help
+python scripts/commands/flow_deepread_command.py --help
+python scripts/commands/flow_figures_command.py --help
+python scripts/commands/flow_lookup_command.py --help
 ```
 
-CLI 帮助检查：
+底层 phase 调试入口：
 
 ```bash
 python scripts/intake/flow_intake_fetch.py --help
@@ -39,19 +103,25 @@ python scripts/synthesis/flow_synthesis_link.py --help
 python scripts/registry/flow_registry_update.py --help
 ```
 
-## 失败时应该有什么表现
+## 失败排查建议
 
-- 缺配置：立即报错，不继续执行。
-- 源数据为空：仍应保留 run 目录，并明确状态。
-- registry 更新失败：不能静默丢掉 artifact 路径。
-- 可选依赖缺失：应明确指出缺什么，而不是让无关阶段一起失效。
+先看 `run_manifest.json`，确认：
 
-## 实际排查建议
+- `run_id`
+- `stage`
+- `status`
+- `artifacts`
+- `warnings`
+- `source_status`
 
-先看 `runtime/runs/<run_id>/run_manifest.json`，确认：
+再看 Vault，确认：
 
-- `run_id` 是否正确
-- 当前阶段写入了哪些 artifact
-- `status` 是否符合预期
+- 日报是否写入正确目录
+- 单篇深读是否写入 `research/papers/`
+- 图片是否落在论文目录
 
-再看 `runtime/artifacts/`，确认稳定产物是否真的落盘。
+对于 standalone 模式，再额外确认：
+
+- `~/.codex/skills/.internal/research-foundry/commands/` 是否存在
+- `.runtime/python.txt` 是否记录了有效 Python 路径
+- 固定 venv 是否安装了依赖

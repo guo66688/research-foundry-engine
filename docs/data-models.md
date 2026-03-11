@@ -1,12 +1,12 @@
 # 数据契约
 
-这份文档定义五个阶段共享的数据模型。任何脚本新增字段、改状态、改命名，都应该先更新这里。
+这份文档定义 phase 层和命令层共享的数据模型。新增字段、改状态或改命名时，应该先更新这里。
 
 ## 标识规则
 
 - `run_id`：`run-<YYYYMMDDTHHMMSSZ>`
 - `paper_id`：优先使用规范化 arXiv ID；没有时使用带源前缀的 slug
-- `profile_id`：来自 profile 配置，使用小写 snake case
+- `profile_id`：使用小写 snake case
 - `relation_id`：`rel-<source_slug>-<target_slug>-<relation_type>`
 
 ## 状态流转
@@ -19,13 +19,11 @@
 4. `linked`
 5. `registered`
 
-只有在已知前置产物存在时，脚本才能跳过中间状态。
-
-## 文件契约
+## Phase 文件契约
 
 ### `candidate_pool.jsonl`
 
-每行一个 JSON 对象，至少包含：
+每行至少包含：
 
 - `run_id`
 - `profile_id`
@@ -48,7 +46,7 @@
 
 ### `run_manifest.json`
 
-顶层字段至少应包含：
+顶层至少包含：
 
 - `run_id`
 - `profile_id`
@@ -76,7 +74,7 @@
 - `selected`
 - `rejected`
 
-`selected` 和 `rejected` 里的每项至少包含：
+`selected` 和 `rejected` 中每项至少包含：
 
 - `paper_id`
 - `title`
@@ -89,22 +87,6 @@
 - `dedupe_group_id`
 - `reason`
 
-### `YYYY-MM-DD-<profile_id>.md`
-
-这是 triage 阶段衍生出的 Obsidian 日报文档，默认写入：
-
-- `workspace.notes_root/<inbox_dir>/daily-recommendations/YYYY/`
-
-文档建议包含：
-
-- `run_id`
-- `profile_id`
-- `candidate_count`
-- `shortlist_count`
-- Top 5 推荐论文
-- 完整 shortlist
-- 运行产物路径
-
 ### `figure_manifest-<paper_id>.json`
 
 顶层字段：
@@ -114,7 +96,7 @@
 - `figure_count`
 - `items`
 
-`items` 里的每项至少包含：
+`items` 中每项至少包含：
 
 - `name`
 - `source`
@@ -124,7 +106,7 @@
 
 ### `paper_registry.jsonl`
 
-每行代表一个已登记的论文产物组：
+每行至少包含：
 
 - `run_id`
 - `paper_id`
@@ -138,7 +120,7 @@
 
 ### `run_registry.jsonl`
 
-每行代表一次运行：
+每行至少包含：
 
 - `run_id`
 - `profile_id`
@@ -171,6 +153,47 @@
 - `type`
 - `weight`
 
+## Vault 文档契约
+
+### 每日推荐文档 `YYYY-MM-DD-<profile_id>.md`
+
+建议至少包含：
+
+- `run_id`
+- `profile_id`
+- `candidate_count`
+- `shortlist_count`
+- `source_status`
+- Top 5 推荐论文
+- 完整 shortlist
+- 前 3 篇深读笔记链接
+- 运行产物路径
+
+### 单篇深读文档 `<paper_id>.md`
+
+建议至少包含：
+
+- 论文标题
+- `paper_id`
+- 摘要翻译
+- 要点提炼
+- 背景与动机
+- 方法概述
+- 实验与结果
+- 价值判断
+- 优势与局限
+- 相关笔记链接
+- 图片索引或图片目录
+
+### 图片索引文档 `<paper_id>-figures.md`
+
+建议至少包含：
+
+- `paper_id`
+- 图片数量
+- 每张图片的相对路径
+- 图片来源说明
+
 ## 命名规则
 
 - dossier 文件：`dossier-<paper_id>-<slug>.md`
@@ -178,6 +201,8 @@
 - 阅读队列：`reading_queue-<run_id>.md`
 - 单次运行摘要：`run_manifest.json`
 - 每日推荐文档：`YYYY-MM-DD-<profile_id>.md`
+- 单篇深读文档：`<paper_id>.md`
+- 图片索引文档：`<paper_id>-figures.md`
 
 ## 枚举值
 
@@ -193,7 +218,7 @@
 - `completed`
 - `failed`
 
-### `relation type`
+### `relation_type`
 
 - `extends`
 - `references`

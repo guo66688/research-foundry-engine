@@ -1,112 +1,139 @@
 # 配置说明
 
-项目有两类配置文件：
+Research Foundry 的核心配置仍然是两份 YAML：
 
-- `configs/workflow.yaml`：描述工作区、数据源、运行策略和输出策略
-- `configs/profiles.yaml`：描述研究画像、候选范围和打分偏好
+- `configs/workflow.yaml`
+- `configs/profiles.yaml`
+
+这两份配置同时适用于 `external` 与 `standalone` 两种模式。
+
+## 推荐配置原则
+
+- `notes_root` 指向 Obsidian Vault 根目录
+- `run_dir / artifact_dir / cache_dir / log_dir` 放在 Vault 外
+- `triage_policy.shortlist_size` 默认为 `10`
+- 默认 `profile_id` 使用 `llm_systems`
 
 ## `workflow.yaml`
 
 ### `workspace`
 
-- `notes_root`：本地笔记库根目录
-- `inbox_dir`：原始输入或待整理目录
-- `dossier_dir`：研究档案目录
-- `assets_dir`：图像等资产目录
+- `notes_root`：Vault 根目录
+- `inbox_dir`：每日推荐文档目录的相对根
+- `dossier_dir`：论文深读笔记目录
+- `assets_dir`：论文图片目录
+
+推荐理解：
+
+- `notes_root` 下面只放 Markdown 和图片
+- `daily-recommendations`、`research/papers` 等最终文档由命令层写入这里
 
 ### `sources`
 
 #### `sources.arxiv`
 
-- `enabled`：是否启用 arXiv
-- `categories`：要抓取的 arXiv 分类
-- `lookback_days`：回看天数
-- `max_results`：最大拉取量
+- `enabled`
+- `categories`
+- `lookback_days`
+- `max_results`
+
+推荐用途：最近 30 天的新论文发现。
 
 #### `sources.semantic_scholar`
 
-- `enabled`：是否启用 Semantic Scholar
-- `api_key_env`：API key 的环境变量名
-- `history_window_days`：历史窗口大小
-- `max_results`：最大拉取量
+- `enabled`
+- `api_key_env`
+- `history_window_days`
+- `max_results`
+
+推荐用途：补充更长时间窗里的高信号论文。
 
 ### `triage_policy`
 
-- `shortlist_size`：最终 shortlist 数量
-- `score_weights`
-- `topical_fit`：主题匹配权重
-- `freshness`：新近性权重
-- `impact`：影响力权重
-- `method_signal`：方法信号权重
+- `shortlist_size`
+- `score_weights.topical_fit`
+- `score_weights.freshness`
+- `score_weights.impact`
+- `score_weights.method_signal`
+
+默认推荐：
+
+- `shortlist_size: 10`
+- 用四个维度做综合排序：相关性、新近性、热门度、质量/方法信号
 
 ### `dossier_policy`
 
-- `figure_mode`：图像提取策略，可映射到 `dossier_with_figures` 或 `dossier_only`
-- `include_sections`：dossier 要包含的章节
-- `citation_style`：引用风格
-- `summary_length`：摘要长度档位
-- `max_figures`：最多保留多少张图
+- `figure_mode`
+- `include_sections`
+- `citation_style`
+- `summary_length`
+- `max_figures`
+
+说明：
+
+- `深读论文` 默认会调用 dossier 和 figure extraction
+- `提取配图` 只走 figure 相关逻辑，不生成完整 dossier
 
 ### `synthesis_policy`
 
-- `backlinking`：是否生成 backlinks
-- `max_backlinks`：最多链接多少条已有笔记
-- `relation_score_threshold`：relation 写入阈值，低于该值不落边
-- `relation_types`：允许写入的 relation 类型
-- `link_strategy`：关联策略
-- `relation_store`：relation 文件路径
+- `backlinking`
+- `max_backlinks`
+- `relation_score_threshold`
+- `relation_types`
+- `link_strategy`
+- `relation_store`
+
+说明：
+
+- `深读论文` 默认会继续做知识链接
+- `今日推荐` 默认会对前 3 篇做知识链接
 
 ### `runtime`
 
-- `cache_dir`：缓存目录
-- `run_dir`：单次运行目录
-- `artifact_dir`：稳定产物目录
-- `log_dir`：日志目录
-- `log_level`：日志级别
-- `retry_limit`：请求重试次数
-- `request_timeout_seconds`：请求超时
-- `dedupe_strategy`：去重策略
+- `cache_dir`
+- `run_dir`
+- `artifact_dir`
+- `log_dir`
+- `log_level`
+- `retry_limit`
+- `request_timeout_seconds`
+- `dedupe_strategy`
+
+推荐放置策略：
+
+- 不要把这些目录放进 Vault
+- standalone 与 external 都应指向 Vault 外的统一 runtime 区域
 
 ## `profiles.yaml`
 
-`profiles` 是一个列表，每项代表一个研究策略单元，而不只是关键词集合。
-
 每个 profile 至少应包含：
 
-- `profile_id`：唯一标识
-- `include_terms`：感兴趣的关键词
-- `exclude_terms`：要排除的关键词
-- `priority`：优先级
-- `max_candidates`：候选上限
-- `source_scope`：允许从哪些源拉取
-- `scoring_overrides`：对默认打分权重的局部覆盖
+- `profile_id`
+- `include_terms`
+- `exclude_terms`
+- `priority`
+- `max_candidates`
+- `source_scope`
+- `scoring_overrides`
 
-## 推荐修改顺序
+默认推荐的日常 profile：
 
-第一次配置时，优先改：
+- `profile_id: llm_systems`
+
+## 最常改的字段
+
+第一次接入 Vault 时，优先改：
 
 1. `workspace.notes_root`
-2. `sources.*.enabled`
-3. `profiles[].include_terms`
-4. `profiles[].source_scope`
-5. `triage_policy.shortlist_size`
+2. `runtime.run_dir`
+3. `runtime.artifact_dir`
+4. `profiles[].include_terms`
+5. `profiles[].source_scope`
+6. `triage_policy.shortlist_size`
 
-## 常见组合
+## 配置与命令层的关系
 
-偏发现导向：
-
-- 提高 `sources.*.max_results`
-- 提高 `profiles[].max_candidates`
-- 适当提高 `freshness`
-
-偏高价值筛选：
-
-- 降低 `shortlist_size`
-- 提高 `impact`
-- 提高 `method_signal`
-
-偏本地知识沉淀：
-
-- 明确 `workspace.notes_root`
-- 开启 `backlinking`
-- 配好 `relation_types` 和 `max_backlinks`
+- `今日推荐` 会读取 `workflow.yaml` 与 `profiles.yaml`
+- `深读论文` 会读取 `workflow.yaml`，并在需要时用 `profiles.yaml`
+- `提取配图` 只依赖 `workflow.yaml`
+- `搜索论文` 只依赖 `workflow.yaml` 中的 `notes_root`

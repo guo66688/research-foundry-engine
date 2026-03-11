@@ -1,44 +1,42 @@
-# 文档总览
+# 文档索引
 
-这套文档按“入口 -> 结构 -> 契约 -> 运行”的顺序组织，默认面向中文使用者。
+这套文档默认按“先用起来，再理解结构”的顺序组织，并以 `standalone` 内置分发版作为默认推荐路径。
 
-## 阅读顺序
+## 推荐阅读顺序
 
-第一次接触项目：
+### 日常使用者
 
-1. [README.md](/home/icoffee/Projects/codex-arxiv-tools/README.md)
-2. [QUICKSTART.md](/home/icoffee/Projects/codex-arxiv-tools/QUICKSTART.md)
-3. [architecture.md](/home/icoffee/Projects/codex-arxiv-tools/docs/architecture.md)
-4. [configuration.md](/home/icoffee/Projects/codex-arxiv-tools/docs/configuration.md)
+1. [README.md](../README.md)
+2. [QUICKSTART.md](../QUICKSTART.md)
+3. [skills.md](skills.md)
+4. [runtime.md](runtime.md)
 
-准备改脚本或接新阶段：
+### 开发者
 
-1. [architecture.md](/home/icoffee/Projects/codex-arxiv-tools/docs/architecture.md)
-2. [data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md)
-3. [conventions.md](/home/icoffee/Projects/codex-arxiv-tools/docs/conventions.md)
-4. [runtime.md](/home/icoffee/Projects/codex-arxiv-tools/docs/runtime.md)
-
-准备在 Codex 中使用 skills：
-
-1. [skills.md](/home/icoffee/Projects/codex-arxiv-tools/docs/skills.md)
-2. `.agents/skills/*/SKILL.md`
+1. [README.md](../README.md)
+2. [architecture.md](architecture.md)
+3. [configuration.md](configuration.md)
+4. [data-models.md](data-models.md)
+5. [conventions.md](conventions.md)
+6. [runtime.md](runtime.md)
 
 ## 文档分层
 
 - 根目录文档
-- [README.md](/home/icoffee/Projects/codex-arxiv-tools/README.md)：项目定位、模块关系、最小运行路径。
-- [QUICKSTART.md](/home/icoffee/Projects/codex-arxiv-tools/QUICKSTART.md)：最短路径，不展开设计细节。
+- [README.md](../README.md)：项目定位、双模式说明、推荐入口
+- [QUICKSTART.md](../QUICKSTART.md)：最短安装和使用路径
 
 - `docs/` 主题文档
-- [architecture.md](/home/icoffee/Projects/codex-arxiv-tools/docs/architecture.md)：模块职责、顺序、依赖关系。
-- [configuration.md](/home/icoffee/Projects/codex-arxiv-tools/docs/configuration.md)：配置文件怎么写、字段怎么用。
-- [data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md)：数据契约、状态流转、命名规则。
-- [runtime.md](/home/icoffee/Projects/codex-arxiv-tools/docs/runtime.md)：运行目录、产物位置、验证命令。
-- [conventions.md](/home/icoffee/Projects/codex-arxiv-tools/docs/conventions.md)：命名、slug、时间戳、状态词汇。
-- [skills.md](/home/icoffee/Projects/codex-arxiv-tools/docs/skills.md)：五个 skills 的触发边界和使用方式。
+- [architecture.md](architecture.md)：命令层、phase skills、双 backend 的分层关系
+- [configuration.md](configuration.md)：Vault、runtime、source 与策略配置
+- [data-models.md](data-models.md)：跨阶段共享的数据契约
+- [runtime.md](runtime.md)：运行目录、产物位置、standalone 安装位置
+- [conventions.md](conventions.md)：命名与路径约定
+- [skills.md](skills.md)：phase skills、AGENTS 路由与 standalone 分发关系
 
-## 使用建议
+## 默认建议
 
-- 想尽快跑通一次流程，优先读 `README -> QUICKSTART -> configuration`。
-- 想保证不同阶段能拼起来，优先读 `architecture -> data-models`。
-- 想避免新脚本和旧约定冲突，优先读 `conventions -> runtime`。
+- 默认安装方式：`standalone-skills/` + 一键安装脚本
+- 默认使用入口：Vault `AGENTS.md` 中的中文命令
+- 默认运行环境：固定虚拟环境 `research-foundry-standalone`
+- 默认存储策略：Vault 只放 Markdown 和图片，runtime 放到 Vault 外

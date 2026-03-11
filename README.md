@@ -1,135 +1,134 @@
 # Research Foundry
 
-Research Foundry 是一个面向 Codex 的研究流程工具箱，用来把论文发现、筛选、证据整理、知识关联和运行登记串成一条清晰的工程化流水线。项目优先强调流程阶段和数据契约，而不是零散动作集合。
+Research Foundry 是一套面向 Codex 的论文发现与沉淀工作流。它把论文抓取、候选筛选、单篇深读、笔记关联和运行登记拆成稳定阶段，同时支持两种运行方式：
 
-## 项目目标
+- `standalone` 内置分发版：推荐给日常使用者。只分发 `standalone-skills/`，运行一键安装脚本后即可在新机器使用。
+- `external` 外置仓库版：推荐给开发者。直接在 `research-foundry-engine` 仓库中调试脚本、修改命令层和 phase skills。
 
-- 从论文源中拉取候选记录，并归入明确的研究画像。
-- 用统一规则做评分、去重和阅读队列生成。
-- 围绕单篇论文生成结构化 evidence dossier。
-- 把新结论回连到本地笔记库和关系图。
-- 记录每次运行与产物，保证流程可追溯。
+## 推荐使用方式
 
-## 核心流程
+默认推荐 `standalone` 内置分发版。
 
-`source-intake` -> `candidate-triage` -> `evidence-dossier` -> `knowledge-synthesis` -> `run-registry`
+典型场景：
 
-五个阶段各自只负责一段职责：
+- 你主要在 Obsidian Vault 里使用 `今日推荐 / 深读论文 / 提取配图 / 搜索论文`
+- 你希望新机器只需要复制 skill 并安装一次环境
+- 你不想把运行时 JSON、缓存和日志放进 Obsidian Vault
 
-- `source-intake`：抓取并标准化候选论文。
-- `candidate-triage`：打分、去重、分层并输出阅读队列。
-- `evidence-dossier`：围绕单篇论文产出结构化证据档案。
-- `knowledge-synthesis`：把 dossier 连接到已有笔记和关系数据。
-- `run-registry`：登记运行元数据、产物路径和全局索引。
+只有在下面情况才建议使用 `external` 外置仓库版：
 
-## 文档入口
+- 需要修改 `scripts/commands/` 或某个 phase script
+- 需要调试 source intake、triage 或 dossier 的实现
+- 需要重新打包 standalone skills
 
-- 文档总览：[docs/index.md](/home/icoffee/Projects/codex-arxiv-tools/docs/index.md)
-- 快速开始：[QUICKSTART.md](/home/icoffee/Projects/codex-arxiv-tools/QUICKSTART.md)
-- 架构说明：[docs/architecture.md](/home/icoffee/Projects/codex-arxiv-tools/docs/architecture.md)
-- 配置说明：[docs/configuration.md](/home/icoffee/Projects/codex-arxiv-tools/docs/configuration.md)
-- 数据契约：[docs/data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md)
-- 运行与产物：[docs/runtime.md](/home/icoffee/Projects/codex-arxiv-tools/docs/runtime.md)
-- 命名与约定：[docs/conventions.md](/home/icoffee/Projects/codex-arxiv-tools/docs/conventions.md)
-- Skills 使用边界：[docs/skills.md](/home/icoffee/Projects/codex-arxiv-tools/docs/skills.md)
+## 功能概览
+
+高层入口由 Obsidian Vault 中的 `AGENTS.md` 定义：
+
+- `今日推荐 [profile_id]`
+- `深读论文 <paper_id|title>`
+- `提取配图 <paper_id|title>`
+- `搜索论文 <query>`
+
+这些入口不会创建新的高层 skill，而是编排现有 phase skills：
+
+`source-intake -> candidate-triage -> evidence-dossier -> knowledge-synthesis -> run-registry`
+
+其中：
+
+- `今日推荐` 会运行 intake、triage、日报渲染，并默认深读前 3 篇
+- `深读论文` 会生成单篇中文笔记、提取图片并默认做知识链接
+- `提取配图` 只提图，不生成完整 dossier
+- `搜索论文` 只搜本地 Vault Markdown，不做远程抓取
 
 ## 目录结构
 
 ```text
 .
-├── AGENTS.md
-├── QUICKSTART.md
 ├── README.md
+├── QUICKSTART.md
 ├── configs/
-│   ├── profiles.example.yaml
-│   └── workflow.example.yaml
 ├── docs/
-│   ├── architecture.md
-│   ├── configuration.md
-│   ├── conventions.md
-│   ├── data-models.md
-│   ├── index.md
-│   ├── runtime.md
-│   └── skills.md
-├── .agents/
-│   └── skills/
+├── .agents/skills/
 ├── scripts/
+│   ├── commands/
 │   ├── shared/
 │   ├── intake/
 │   ├── triage/
 │   ├── dossier/
 │   ├── synthesis/
 │   └── registry/
+├── standalone-skills/
 └── runtime/
-    ├── artifacts/
-    ├── cache/
-    ├── logs/
-    └── runs/
 ```
 
-## 最小运行路径
+关键目录说明：
 
-先安装依赖：
+- `scripts/commands/`：高层命令编排层，对应 `今日推荐 / 深读论文 / 提取配图 / 搜索论文`
+- `.agents/skills/`：phase skills 的源码说明
+- `standalone-skills/`：可分发的内置版 skill 打包结果
+- `runtime/`：运行时产物，应该放在 Vault 外
+
+## 快速入口
+
+如果你是第一次使用，按这个顺序看：
+
+1. [QUICKSTART.md](QUICKSTART.md)
+2. [docs/index.md](docs/index.md)
+3. [docs/skills.md](docs/skills.md)
+4. [standalone-skills/README.md](standalone-skills/README.md)
+
+如果你要改代码或排查问题，继续看：
+
+1. [docs/architecture.md](docs/architecture.md)
+2. [docs/configuration.md](docs/configuration.md)
+3. [docs/runtime.md](docs/runtime.md)
+4. [docs/data-models.md](docs/data-models.md)
+
+## 最短路径
+
+### A. 推荐路径：standalone 内置分发
+
+1. 复制 `standalone-skills/` 到目标机器
+2. 运行安装脚本
+3. 在 Obsidian Vault 中准备 `configs/workflow.yaml` 和 `configs/profiles.yaml`
+4. 用 Codex 打开 Vault，直接输入 `今日推荐`
+
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\standalone-skills\install-standalone-skills.ps1 -InstallDeps
+```
+
+macOS/Linux:
 
 ```bash
-pip install -r requirements.txt
+./standalone-skills/install-standalone-skills.sh --install-deps
 ```
 
-再准备本地配置：
+默认虚拟环境路径：
+
+- Windows: `%USERPROFILE%\.codex\venvs\research-foundry-standalone`
+- macOS/Linux: `~/.codex/venvs/research-foundry-standalone`
+
+### B. 开发路径：external 外置仓库
+
+直接运行命令层脚本：
 
 ```bash
-cp configs/workflow.example.yaml configs/workflow.yaml
-cp configs/profiles.example.yaml configs/profiles.yaml
+python scripts/commands/flow_today_command.py --config configs/workflow.yaml --profiles configs/profiles.yaml
+python scripts/commands/flow_deepread_command.py 2603.09821 --config configs/workflow.yaml --profiles configs/profiles.yaml
+python scripts/commands/flow_figures_command.py 2603.09821 --config configs/workflow.yaml
+python scripts/commands/flow_lookup_command.py "agent memory" --config configs/workflow.yaml
 ```
 
-然后依次执行：
+## 设计边界
 
-```bash
-python scripts/intake/flow_intake_fetch.py \
-  --config configs/workflow.yaml \
-  --profiles configs/profiles.yaml \
-  --profile-id llm_systems
-
-python scripts/triage/flow_triage_rank.py \
-  --config configs/workflow.yaml \
-  --profiles configs/profiles.yaml \
-  --profile-id llm_systems \
-  --input runtime/runs/<run_id>/candidate_pool.jsonl
-
-python scripts/dossier/flow_dossier_build.py \
-  --config configs/workflow.yaml \
-  --profiles configs/profiles.yaml \
-  --profile-id llm_systems \
-  --triage-file runtime/runs/<run_id>/triage_result.json \
-  --paper-id <paper_id>
-
-python scripts/synthesis/flow_synthesis_link.py \
-  --config configs/workflow.yaml \
-  --dossier runtime/artifacts/dossier-<paper_id>-<slug>.md
-
-python scripts/registry/flow_registry_update.py \
-  --config configs/workflow.yaml \
-  --run-id <run_id> \
-  --paper-id <paper_id> \
-  --state registered \
-  --artifact dossier=runtime/artifacts/dossier-<paper_id>-<slug>.md
-```
-
-## 在 Codex 中如何使用
-
-`.agents/skills/` 下的 skills 是这套流程的操作说明层，不是项目本体。适合在这几种情况下调用：
-
-- 需要 Codex 帮你判断应该跑哪个阶段。
-- 需要 Codex 根据输入输出契约拼出正确命令。
-- 需要 Codex 在失败时解释边界、前置条件和回退方式。
-
-如果你已经清楚脚本入口和参数，直接运行 `scripts/` 下的 CLI 即可。
-
-## 可选集成
-
-- 本地笔记库：通过 `workspace.notes_root` 及其子目录接入。
-- Semantic Scholar API Key：由 `sources.semantic_scholar.api_key_env` 指定环境变量名。
-- 图像提取：由 `dossier_policy.figure_mode` 控制，相关逻辑在 dossier 阶段。
+- Obsidian Vault 里只放 Markdown 文档、配置和图片
+- `candidate_pool.jsonl`、`triage_result.json`、manifest、logs、cache 不应写入 Vault
+- 高层命令由 `AGENTS.md` 路由
+- phase skills 只负责各自阶段，不承担新的高层产品编排
+- standalone 与 external 共用同一套阶段契约和命令语义
 
 ## 验证
 
@@ -137,6 +136,7 @@ python scripts/registry/flow_registry_update.py \
 
 ```bash
 python -m compileall scripts
+python scripts/tooling/build_standalone_skills.py
 ```
 
-如果只想验证 CLI 接口是否可用，可继续查看 [docs/runtime.md](/home/icoffee/Projects/codex-arxiv-tools/docs/runtime.md) 里的帮助命令。
+如果只改文档或配置，可以跳过构建。

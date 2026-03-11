@@ -11,6 +11,7 @@ SKILLS_ROOT = REPO_ROOT / ".agents" / "skills"
 HANDOFF_MATRIX = SKILLS_ROOT / "references" / "handoff-matrix.md"
 OUTPUT_ROOT = REPO_ROOT / "standalone-skills"
 DEFAULT_VENV_NAME = "research-foundry-standalone"
+COMMANDS_ROOT = REPO_ROOT / "scripts" / "commands"
 
 SKILL_ORDER = [
     "source-intake",
@@ -167,7 +168,7 @@ SKILL_SPECS = {
 def copy_tree(source: Path, destination: Path) -> None:
     if destination.exists():
         shutil.rmtree(destination)
-    shutil.copytree(source, destination)
+    shutil.copytree(source, destination, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
 
 
 def copy_text_file(file_spec: FileSpec, destination_root: Path) -> None:
@@ -258,6 +259,15 @@ if ($InstallDeps -or (Test-Path (Get-VenvPythonPath -Path $VenvPath)) -or $Recre
     $runtimePython = Ensure-Venv -Path $VenvPath -Bootstrap $BootstrapPython -Recreate:$RecreateVenv
 }
 
+$supportSource = Join-Path $root ".internal"
+$supportTarget = Join-Path $Destination ".internal"
+if (Test-Path $supportSource) {
+    if (Test-Path $supportTarget) {
+        Remove-Item -Path $supportTarget -Recurse -Force
+    }
+    Copy-Item -Path $supportSource -Destination $supportTarget -Recurse -Force
+}
+
 foreach ($name in $Skill) {
     $source = Join-Path $root $name
     if (-not (Test-Path $source)) {
@@ -273,7 +283,8 @@ foreach ($name in $Skill) {
     if ($runtimePython) {
         $runtimeDir = Join-Path $target ".runtime"
         New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
-        Set-Content -Path (Join-Path $runtimeDir "python.txt") -Value $runtimePython -Encoding utf8
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        [System.IO.File]::WriteAllText((Join-Path $runtimeDir "python.txt"), $runtimePython, $utf8NoBom)
     }
     Write-Host "Installed $name -> $target"
 }
@@ -385,6 +396,13 @@ if [ "$INSTALL_DEPS" = true ] || [ "$RECREATE_VENV" = true ] || [ -x "$(venv_pyt
   RUNTIME_PYTHON="$(ensure_venv "$VENV_PATH" "$BOOTSTRAP_PYTHON")"
 fi
 
+SUPPORT_SOURCE="$ROOT/.internal"
+SUPPORT_TARGET="$DESTINATION/.internal"
+if [ -d "$SUPPORT_SOURCE" ]; then
+  rm -rf "$SUPPORT_TARGET"
+  cp -R "$SUPPORT_SOURCE" "$SUPPORT_TARGET"
+fi
+
 for name in "${SKILLS[@]}"; do
   SOURCE="$ROOT/$name"
   TARGET="$DESTINATION/$name"
@@ -440,6 +458,7 @@ def build(output_root: Path) -> None:
     for skill_name in SKILL_ORDER:
         build_skill(skill_name, output_root)
 
+    copy_tree(COMMANDS_ROOT, output_root / ".internal" / "research-foundry" / "commands")
     shutil.copy2(REPO_ROOT / "requirements.txt", output_root / "requirements.txt")
     write_install_ps1(output_root)
     write_install_sh(output_root)

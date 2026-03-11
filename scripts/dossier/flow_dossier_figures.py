@@ -54,7 +54,10 @@ def _download_arxiv_source(paper_id: str, temp_dir: Path, timeout: int, retry_li
     except RuntimeError:  # pragma: no cover - network dependent
         return None
     archive_path = temp_dir / f"{paper_id}.tar"
-    archive_path.write_bytes(payload)
+    try:
+        archive_path.write_bytes(payload)
+    except OSError:  # pragma: no cover - filesystem dependent
+        return None
     return archive_path
 
 
@@ -70,7 +73,10 @@ def _download_pdf(paper_id: str, temp_dir: Path, timeout: int, retry_limit: int)
     except RuntimeError:  # pragma: no cover - network dependent
         return None
     pdf_path = temp_dir / f"{paper_id}.pdf"
-    pdf_path.write_bytes(payload)
+    try:
+        pdf_path.write_bytes(payload)
+    except OSError:  # pragma: no cover - filesystem dependent
+        return None
     return pdf_path
 
 
@@ -171,7 +177,12 @@ def build_figure_manifest(
     manifest_items: List[Dict[str, object]] = []
     normalized_paper_id = canonical_paper_id(paper_id)
 
-    with tempfile.TemporaryDirectory(prefix="research-foundry-figures-") as temp_name:
+    temp_root = output_dir.parent if output_dir.parent.exists() else None
+    with tempfile.TemporaryDirectory(
+        prefix="research-foundry-figures-",
+        dir=str(temp_root) if temp_root else None,
+        ignore_cleanup_errors=True,
+    ) as temp_name:
         temp_dir = Path(temp_name)
         archive_path = _download_arxiv_source(normalized_paper_id, temp_dir, timeout, retry_limit)
         if archive_path is not None:

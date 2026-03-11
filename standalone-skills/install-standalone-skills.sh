@@ -92,6 +92,13 @@ if [ "$INSTALL_DEPS" = true ] || [ "$RECREATE_VENV" = true ] || [ -x "$(venv_pyt
   RUNTIME_PYTHON="$(ensure_venv "$VENV_PATH" "$BOOTSTRAP_PYTHON")"
 fi
 
+SUPPORT_SOURCE="$ROOT/.internal"
+SUPPORT_TARGET="$DESTINATION/.internal"
+if [ -d "$SUPPORT_SOURCE" ]; then
+  rm -rf "$SUPPORT_TARGET"
+  cp -R "$SUPPORT_SOURCE" "$SUPPORT_TARGET"
+fi
+
 for name in "${SKILLS[@]}"; do
   SOURCE="$ROOT/$name"
   TARGET="$DESTINATION/$name"

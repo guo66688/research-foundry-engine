@@ -1,45 +1,41 @@
 # 架构说明
 
-Research Foundry 按五个明确的执行阶段组织，每个阶段只读写自己的输入输出，不跨界承担别人的职责。
+Research Foundry 现在分成四层，而不是只有 phase scripts。
 
-## 阶段职责
+## 四层结构
 
-### `source-intake`
+### 1. Vault 路由层
 
-- 输入：workflow 配置、profiles 配置、`profile_id`
-- 输出：`candidate_pool.jsonl`
-- 负责：从外部源抓取论文记录并标准化为统一 schema
-- 不负责：排序打分、dossier 生成、笔记关联、registry 更新
+由 Obsidian Vault 中的 `AGENTS.md` 定义用户入口：
 
-### `candidate-triage`
+- `今日推荐`
+- `深读论文`
+- `提取配图`
+- `搜索论文`
 
-- 输入：`candidate_pool.jsonl`、workflow 配置、profiles 配置
-- 输出：`triage_result.json`、`reading_queue-<run_id>.md`
-- 负责：打分、去重、分层、shortlist 生成
-- 不负责：原始数据抓取、单篇档案生成、relation 更新
+这一层只描述“用户想做什么”，不实现抓源、排序或 dossier 逻辑。
 
-### `evidence-dossier`
+### 2. 命令编排层
 
-- 输入：`paper_id`、candidate 或 triage 元数据、dossier 策略
-- 输出：`dossier-<paper_id>-<slug>.md`，可选 `figure_manifest-<paper_id>.json`
-- 负责：围绕单篇论文生成结构化 evidence package
-- 不负责：全局优先级排序、知识图维护、registry 写入
+对应 `scripts/commands/`：
 
-### `knowledge-synthesis`
+- `flow_today_command.py`
+- `flow_deepread_command.py`
+- `flow_figures_command.py`
+- `flow_lookup_command.py`
 
-- 输入：dossier Markdown、notes root、relation 策略
-- 输出：`synthesis_report-<paper_id>.md`、`relations.json`
-- 负责：把新 dossier 连接到已有笔记和关系边
-- 不负责：重排候选池、全文深度解析、运行登记
+职责：
 
-### `run-registry`
+- 解析高层命令意图
+- 选择 `external` 或 `standalone` backend
+- 组合 phase skills
+- 把运行结果转写成 Obsidian 友好的 Markdown
 
-- 输入：run 元数据、paper 标识、artifact 路径
-- 输出：`run_manifest.json`、`paper_registry.jsonl`、`run_registry.jsonl`
-- 负责：登记发生了什么、产物在哪、状态是什么
-- 不负责：内容生成、源数据访问、关系推理
+这层是高层入口的真实执行器，但它不是新的 skill 层。
 
-## 默认依赖顺序
+### 3. Phase 层
+
+固定为五个阶段：
 
 1. `source-intake`
 2. `candidate-triage`
@@ -47,16 +43,77 @@ Research Foundry 按五个明确的执行阶段组织，每个阶段只读写自
 4. `knowledge-synthesis`
 5. `run-registry`
 
-## 哪些阶段可单独运行
+每个阶段只负责自己的输入输出契约，不直接感知 Vault 的高层产品命令。
 
-- `source-intake`：可以单独刷新候选池。
-- `candidate-triage`：可以对已有候选池反复重跑，不必重新抓源。
-- `evidence-dossier`：可以基于 triage 文件或 candidate 文件独立运行。
-- `knowledge-synthesis`：可以直接对已有 dossier 做关联。
-- `run-registry`：只要 artifact 路径已知，就能补登记。
+### 4. 运行后端层
+
+同一套命令编排可落到两种后端：
+
+- `external`：调用仓库中的 `scripts/...`
+- `standalone`：调用 `~/.codex/skills/*/scripts/...`
+
+这两种模式应共享同一套行为语义和数据契约。
+
+## 默认组合关系
+
+### `今日推荐`
+
+默认编排：
+
+1. `source-intake`
+2. `candidate-triage`
+3. 渲染日报
+4. 对前 3 篇运行 `evidence-dossier`
+5. 为前 3 篇提取图片
+6. 为前 3 篇运行 `knowledge-synthesis`
+
+### `深读论文`
+
+默认编排：
+
+1. 解析 `paper_id` 或标题
+2. `evidence-dossier`
+3. 图片提取
+4. `knowledge-synthesis`
+5. 渲染中文深读笔记
+
+### `提取配图`
+
+默认编排：
+
+1. 解析 `paper_id` 或标题
+2. 运行 dossier figure flow
+3. 写图片索引 Markdown
+
+### `搜索论文`
+
+默认编排：
+
+1. 只搜索本地 Vault Markdown
+2. 按标题、关键词和主题命中排序
+3. 默认直接返回结果，不写文件
+
+## 为什么不新增高层 skill
+
+因为高层入口已经由 `AGENTS.md` 提供。再新增一套 `research-radar` 之类的 skill 会重复描述同一件事，增加维护面。当前设计把职责稳定划成：
+
+- `AGENTS.md`：定义用户命令
+- `scripts/commands/`：做编排
+- phase skills：定义阶段边界
+- scripts：执行实现
+
+## standalone 打包的意义
+
+`standalone-skills/` 不是另一套功能，而是把 phase skills 与内部命令支持层打包成可分发形式。它的目标是：
+
+- 新机器只复制 skill 即可
+- 用固定虚拟环境安装依赖
+- 不要求额外 clone `research-foundry-engine`
 
 ## 设计原则
 
-- 先定义契约，再写脚本。
-- 共享逻辑放在 `scripts/shared/`，阶段脚本保持薄。
-- 所有阶段都必须遵守 [data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md) 中的数据契约。
+- 高层入口用中文命令表达用户意图
+- 中层编排负责组合已有 phase
+- phase 契约稳定，不为单个产品用法临时扩边界
+- Vault 中只保留 Markdown 和图片
+- runtime 目录必须与 Vault 解耦

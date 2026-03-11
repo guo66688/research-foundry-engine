@@ -9,7 +9,7 @@ Research Foundry 是一套面向论文发现、筛选、证据整理、知识关
 - 名称保持中性、专业。
 - 阶段名与流水线保持一致：`intake`、`triage`、`dossier`、`synthesis`、`registry`。
 - 脚本统一使用 `flow_<phase>_<action>.py`。
-- 产物命名以 [docs/data-models.md](/home/icoffee/Projects/codex-arxiv-tools/docs/data-models.md) 为准。
+- 产物命名以 [docs/data-models.md](docs/data-models.md) 为准。
 
 ## 参考仓库隔离
 
