@@ -1,50 +1,72 @@
-# 研究画像列表；每个 profile 表示一个独立的研究策略单元。
 profiles:
-  # 示例 profile：偏向 LLM 系统与推理相关论文。
   - profile_id: "llm_systems"
-    # 用于提升 topical_fit 的关注关键词。
     include_terms:
       - "large language model"
       - "alignment"
       - "inference"
       - "agent"
-    # 命中这些词时会显著降权或直接排除。
     exclude_terms:
       - "survey"
       - "workshop"
-    # profile 的优先级，数值越高越靠前。
     priority: 5
-    # intake / triage 阶段最多处理多少个候选。
     max_candidates: 50
-    # 允许从哪些数据源抓取候选。
     source_scope:
       - "arxiv"
-      - "semantic_scholar"
-    # 对 workflow 默认打分权重做局部覆盖。
     scoring_overrides:
-      topical_fit: 0.45
-      impact: 0.30
+      topical_fit: 0.35
+      knowledge_gain: 0.22
+    reading_preferences:
+      prefer_depth_over_breadth: true
+      tolerate_revisit: true
+      prefer_systems_papers: true
+    knowledge_map:
+      model_systems:
+        status: weak
+        topics:
+          - "inference serving"
+          - "kv cache"
+          - "batching"
+          - "scheduling"
+          - "speculative decoding"
+      agent_systems:
+        status: learning
+        topics:
+          - "planning"
+          - "memory"
+          - "tool use"
+          - "verification"
+          - "multi-agent"
+      alignment:
+        status: known
+        topics:
+          - "reward modeling"
+          - "preference optimization"
+          - "constitutional methods"
+          - "evaluator design"
+      evaluation:
+        status: blind_spot
+        topics:
+          - "benchmark design"
+          - "failure analysis"
+          - "robustness"
+          - "hallucination measurement"
 
-  # 示例 profile：偏向多模态推理与视频理解。
   - profile_id: "multimodal_reasoning"
-    # 用于提升 topical_fit 的关注关键词。
     include_terms:
       - "vision-language"
       - "multimodal"
       - "reasoning"
       - "video"
-    # 命中这些词时会显著降权或直接排除。
     exclude_terms:
       - "benchmark only"
       - "dataset release"
-    # profile 的优先级，数值越高越靠前。
     priority: 4
-    # intake / triage 阶段最多处理多少个候选。
     max_candidates: 40
-    # 允许从哪些数据源抓取候选。
     source_scope:
       - "arxiv"
-    # 对 workflow 默认打分权重做局部覆盖。
     scoring_overrides:
-      freshness: 0.25
-      method_signal: 0.20
+      recency: 0.18
+      method_signal: 0.18
+    reading_preferences:
+      prefer_depth_over_breadth: false
+      tolerate_revisit: true

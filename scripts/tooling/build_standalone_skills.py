@@ -13,6 +13,7 @@ OUTPUT_ROOT = REPO_ROOT / "standalone-skills"
 DEFAULT_VENV_NAME = "research-foundry-standalone"
 COMMANDS_ROOT = REPO_ROOT / "scripts" / "commands"
 TEMPLATES_ROOT = REPO_ROOT / "templates"
+LIB_ROOT = REPO_ROOT / "scripts" / "lib"
 
 SKILL_ORDER = [
     "source-intake",
@@ -80,8 +81,44 @@ SKILL_SPECS = {
                 "scripts/flow_triage_rank.py",
                 ("ROOT = Path(__file__).resolve().parents[2]", "ROOT = Path(__file__).resolve().parent"),
                 ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+                ("from scripts.lib.feedback_registry import", "from rf_standalone.feedback_registry import"),
+                ("from scripts.lib.knowledge_inventory import", "from rf_standalone.knowledge_inventory import"),
+                ("from scripts.lib.paper_similarity import", "from rf_standalone.paper_similarity import"),
+                ("from scripts.lib.profile_adaptation import", "from rf_standalone.profile_adaptation import"),
+                ("from scripts.lib.triage_diversity import", "from rf_standalone.triage_diversity import"),
+                ("from scripts.lib.triage_scoring import", "from rf_standalone.triage_scoring import"),
             ),
             _file_spec("scripts/shared/flow_common.py", "scripts/rf_standalone/flow_common.py"),
+            _file_spec(
+                "scripts/lib/feedback_registry.py",
+                "scripts/rf_standalone/feedback_registry.py",
+                ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+            ),
+            _file_spec(
+                "scripts/lib/paper_similarity.py",
+                "scripts/rf_standalone/paper_similarity.py",
+            ),
+            _file_spec(
+                "scripts/lib/knowledge_inventory.py",
+                "scripts/rf_standalone/knowledge_inventory.py",
+                ("from scripts.lib.paper_similarity import", "from rf_standalone.paper_similarity import"),
+                ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+            ),
+            _file_spec(
+                "scripts/lib/profile_adaptation.py",
+                "scripts/rf_standalone/profile_adaptation.py",
+                ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+            ),
+            _file_spec(
+                "scripts/lib/triage_diversity.py",
+                "scripts/rf_standalone/triage_diversity.py",
+            ),
+            _file_spec(
+                "scripts/lib/triage_scoring.py",
+                "scripts/rf_standalone/triage_scoring.py",
+                ("from scripts.lib.paper_similarity import", "from rf_standalone.paper_similarity import"),
+                ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+            ),
         ),
     ),
     "evidence-dossier": SkillSpec(
@@ -558,6 +595,7 @@ def build(output_root: Path) -> None:
         build_skill(skill_name, output_root)
 
     copy_tree(COMMANDS_ROOT, output_root / ".internal" / "research-foundry" / "commands")
+    copy_tree(LIB_ROOT, output_root / ".internal" / "research-foundry" / "lib")
     copy_tree(TEMPLATES_ROOT, output_root / ".internal" / "research-foundry" / "templates")
     shutil.copy2(REPO_ROOT / "requirements.txt", output_root / "requirements.txt")
     write_standalone_readme(output_root)

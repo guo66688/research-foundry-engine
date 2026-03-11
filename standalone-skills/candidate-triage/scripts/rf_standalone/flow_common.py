@@ -51,8 +51,35 @@ def load_profiles(path: Path) -> List[Dict[str, Any]]:
 def select_profile(path: Path, profile_id: str) -> Dict[str, Any]:
     for profile in load_profiles(path):
         if profile.get("profile_id") == profile_id:
-            return profile
+            return normalize_profile(profile)
     raise KeyError(f"profile_id not found: {profile_id}")
+
+
+def normalize_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(profile)
+    include_keywords = normalized.get("include_keywords")
+    exclude_keywords = normalized.get("exclude_keywords")
+    if include_keywords is not None and "include_terms" not in normalized:
+        normalized["include_terms"] = include_keywords
+    if exclude_keywords is not None and "exclude_terms" not in normalized:
+        normalized["exclude_terms"] = exclude_keywords
+
+    source_scope = normalized.get("source_scope")
+    sources = normalized.get("sources")
+    if isinstance(sources, dict):
+        allow_sources = sources.get("allow")
+        if isinstance(allow_sources, list) and not source_scope:
+            normalized["source_scope"] = [str(item) for item in allow_sources]
+
+    knowledge_map = normalized.get("knowledge_map") or {}
+    if not isinstance(knowledge_map, dict):
+        knowledge_map = {}
+    normalized["knowledge_map"] = knowledge_map
+    reading_preferences = normalized.get("reading_preferences") or {}
+    if not isinstance(reading_preferences, dict):
+        reading_preferences = {}
+    normalized["reading_preferences"] = reading_preferences
+    return normalized
 
 
 def slugify(text: str, max_length: int = 80) -> str:
@@ -149,6 +176,113 @@ def merged_weights(base: Dict[str, float], override: Dict[str, float]) -> Dict[s
     if total <= 0:
         raise ValueError("score weights must sum to a positive value")
     return {name: value / total for name, value in merged.items()}
+
+
+def triage_settings(workflow: Dict[str, Any]) -> Dict[str, Any]:
+    triage_block = workflow.get("triage")
+    legacy_block = workflow.get("triage_policy", {})
+    if not isinstance(triage_block, dict):
+        triage_block = {}
+    if not isinstance(legacy_block, dict):
+        legacy_block = {}
+
+    scoring_block = triage_block.get("scoring", {})
+    shortlist_block = triage_block.get("shortlist", {})
+    deepread_block = triage_block.get("deepread", {})
+    diversity_block = triage_block.get("diversity", {})
+    inventory_block = triage_block.get("inventory", {})
+    feedback_block = triage_block.get("feedback", {})
+    queue_block = triage_block.get("queue", {})
+    revisit_block = triage_block.get("revisit", {})
+    backfill_block = triage_block.get("backfill", {})
+    adaptation_block = triage_block.get("adaptation", {})
+
+    if not isinstance(scoring_block, dict):
+        scoring_block = {}
+    if not isinstance(shortlist_block, dict):
+        shortlist_block = {}
+    if not isinstance(deepread_block, dict):
+        deepread_block = {}
+    if not isinstance(diversity_block, dict):
+        diversity_block = {}
+    if not isinstance(inventory_block, dict):
+        inventory_block = {}
+    if not isinstance(feedback_block, dict):
+        feedback_block = {}
+    if not isinstance(queue_block, dict):
+        queue_block = {}
+    if not isinstance(revisit_block, dict):
+        revisit_block = {}
+    if not isinstance(backfill_block, dict):
+        backfill_block = {}
+    if not isinstance(adaptation_block, dict):
+        adaptation_block = {}
+
+    weights = scoring_block.get("weights", legacy_block.get("score_weights", {}))
+    if not isinstance(weights, dict):
+        weights = {}
+    weights = dict(weights)
+    if "recency" not in weights and "freshness" in weights:
+        weights["recency"] = weights["freshness"]
+    weights.pop("freshness", None)
+
+    shortlist_total = int(shortlist_block.get("total", legacy_block.get("shortlist_size", 10)) or 10)
+    shortlist = {
+        "total": shortlist_total,
+        "must_read": int(shortlist_block.get("must_read", 2) or 2),
+        "trend_watch": int(shortlist_block.get("trend_watch", 3) or 3),
+        "gap_fill": int(shortlist_block.get("gap_fill", max(shortlist_total - 5, 0)) or 0),
+    }
+    deepread = {
+        "must_read_top2": int(deepread_block.get("must_read_top2", 2) or 2),
+        "gap_fill_top1": int(deepread_block.get("gap_fill_top1", 1) or 1),
+    }
+    diversity = {
+        "max_per_bucket": dict(diversity_block.get("max_per_bucket", {}) or {}),
+        "min_per_bucket": dict(diversity_block.get("min_per_bucket", {}) or {}),
+    }
+    inventory = {
+        "enable_daily_recommendations": bool(inventory_block.get("enable_daily_recommendations", True)),
+        "recent_window_days": int(inventory_block.get("recent_window_days", 90) or 90),
+    }
+    feedback = {
+        "enabled": bool(feedback_block.get("enabled", True)),
+        "positive_events": list(feedback_block.get("positive_events", ["deepread", "mark_useful"]) or []),
+        "negative_events": list(feedback_block.get("negative_events", ["mark_not_useful", "ignored", "archived"]) or []),
+    }
+    queue = {
+        "enabled": bool(queue_block.get("enabled", True)),
+        "max_active_items": int(queue_block.get("max_active_items", 30) or 30),
+        "max_daily_review_or_backfill": int(queue_block.get("max_daily_review_or_backfill", 2) or 2),
+        "demote_after_ignored_runs": int(queue_block.get("demote_after_ignored_runs", 3) or 3),
+    }
+    revisit = {
+        "enabled": bool(revisit_block.get("enabled", True)),
+        "max_daily_items": int(revisit_block.get("max_daily_items", 2) or 2),
+        "prefer_recently_referenced": bool(revisit_block.get("prefer_recently_referenced", True)),
+    }
+    backfill = {
+        "enabled": bool(backfill_block.get("enabled", True)),
+        "canonical_map": str(backfill_block.get("canonical_map", "configs/canonical_map.yaml") or "configs/canonical_map.yaml"),
+        "max_daily_items": int(backfill_block.get("max_daily_items", 2) or 2),
+    }
+    adaptation = {
+        "enabled": bool(adaptation_block.get("enabled", True)),
+        "topic_weight_adjustment_cap": float(adaptation_block.get("topic_weight_adjustment_cap", 0.15) or 0.15),
+        "decay_factor": float(adaptation_block.get("decay_factor", 0.9) or 0.9),
+    }
+    return {
+        "weights": weights,
+        "shortlist": shortlist,
+        "deepread": deepread,
+        "diversity": diversity,
+        "inventory": inventory,
+        "feedback": feedback,
+        "queue": queue,
+        "revisit": revisit,
+        "backfill": backfill,
+        "adaptation": adaptation,
+    }
 
 
 def term_hits(text: str, terms: Iterable[str]) -> List[str]:

@@ -12,6 +12,7 @@ from command_common import (
     console_summary,
     daily_note_path,
     load_yaml,
+    plan_today_queue,
     prepare_today_materials,
     read_json,
     render_daily_note,
@@ -56,6 +57,7 @@ def main() -> int:
         triage = run_candidate_triage(backend, config_path, profiles_path, args.profile_id, intake["candidate_pool"])
     triage_payload = read_json(triage["triage_result"], default={}) or {}
     manifest_payload = read_json(intake["candidate_pool"].parent / "run_manifest.json", default={}) or {}
+    queue_plan = plan_today_queue(workflow, config_path, args.profile_id, triage_payload)
     prepared = prepare_today_materials(
         backend,
         workflow,
@@ -67,13 +69,29 @@ def main() -> int:
         triage,
         triage_payload,
         manifest_payload,
+        queue_plan,
         top_deepreads=args.top_deepreads,
     )
 
     if args.write_final_markdown:
         selected = list(triage_payload.get("selected", []))
+        deepread_picks = {
+            "must_read_top2": [item.get("paper_id", "") for item in queue_plan.get("final_buckets", {}).get("must_read", [])[:2]],
+            "gap_fill_top1": [item.get("paper_id", "") for item in queue_plan.get("final_buckets", {}).get("gap_fill", [])[:1]],
+        }
+        selected_map = {str(item.get("paper_id", "")): item for item in selected}
+        deepread_ids = []
+        for key in ["must_read_top2", "gap_fill_top1"]:
+            for paper_id in deepread_picks.get(key, []) or []:
+                if paper_id and paper_id not in deepread_ids:
+                    deepread_ids.append(str(paper_id))
+        if not deepread_ids:
+            deepread_ids = [str(item.get("paper_id", "")) for item in selected[: max(args.top_deepreads, 0)]]
         top3_notes = []
-        for record in selected[: max(args.top_deepreads, 0)]:
+        for paper_id in deepread_ids[: max(args.top_deepreads, 0)]:
+            record = selected_map.get(str(paper_id))
+            if record is None:
+                continue
             bundle = dict(record)
             bundle["_triage_file"] = str(triage["triage_result"])
             bundle["_candidate_file"] = str(intake["candidate_pool"])
@@ -104,6 +122,7 @@ def main() -> int:
                 f"daily_template={prepared['template_path']}",
                 f"target_daily_note={prepared['target_note_path']}",
                 f"top_deepread_count={len(prepared['prepared_deepreads'])}",
+                f"review_or_backfill_count={len(queue_plan.get('review_or_backfill', []))}",
                 f"candidate_count={triage_payload.get('stats', {}).get('input_count', 0)}",
                 f"shortlist_count={triage_payload.get('stats', {}).get('selected_count', 0)}",
                 f"final_markdown_written={'yes' if args.write_final_markdown else 'no'}",

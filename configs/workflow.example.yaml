@@ -1,103 +1,130 @@
-# 工作区相关路径。
 workspace:
-  # 本地笔记库根目录，knowledge-synthesis 会从这里扫描已有笔记。
   notes_root: "/abs/path/to/notes"
-  # 收集待处理资料或临时输入的目录，相对 notes_root 解释。
   inbox_dir: "research/inbox"
-  # 结构化 dossier 的默认落点目录，相对 notes_root 解释。
   dossier_dir: "research/dossiers"
-  # 图像、截图等附属资产的默认目录，相对 notes_root 解释。
   assets_dir: "research/assets"
 
-# 候选论文的数据源配置。
 sources:
   arxiv:
-    # 是否启用 arXiv 抓取。
     enabled: true
-    # 要检索的 arXiv 分类列表。
     categories:
       - "cs.AI"
       - "cs.LG"
       - "cs.CL"
-    # 仅抓取最近多少天内的新论文。
     lookback_days: 30
-    # 单次最多拉取多少条 arXiv 结果。
     max_results: 120
   semantic_scholar:
-    # 是否启用 Semantic Scholar 抓取。
-    enabled: true
-    # 存放 API key 的环境变量名。
+    enabled: false
     api_key_env: "SEMANTIC_SCHOLAR_API_KEY"
-    # 查询引用等历史信息时向前看的时间窗口。
     history_window_days: 365
-    # 单次最多拉取多少条 Semantic Scholar 结果。
     max_results: 40
 
-# 候选排序与 shortlist 生成策略。
+# 新版推荐配置。代码仍兼容旧的 triage_policy 结构。
+triage:
+  scoring:
+    weights:
+      topical_fit: 0.28
+      impact: 0.18
+      recency: 0.12
+      method_signal: 0.12
+      knowledge_gain: 0.18
+      bridge_value: 0.07
+      actionability: 0.05
+      redundancy_penalty: 0.10
+
+  shortlist:
+    total: 10
+    must_read: 2
+    trend_watch: 3
+    gap_fill: 5
+
+  deepread:
+    must_read_top2: 2
+    gap_fill_top1: 1
+
+  diversity:
+    max_per_bucket:
+      inference: 3
+      agent: 3
+      alignment: 2
+    min_per_bucket:
+      evaluation: 1
+      systems: 1
+
+  inventory:
+    # 默认只扫 research/papers；daily recommendations 作为弱信号可配置启用。
+    enable_daily_recommendations: true
+    recent_window_days: 90
+
+  feedback:
+    enabled: true
+    positive_events:
+      - deepread
+      - mark_useful
+    negative_events:
+      - mark_not_useful
+      - ignored
+      - archived
+
+  queue:
+    enabled: true
+    max_active_items: 30
+    max_daily_review_or_backfill: 2
+    demote_after_ignored_runs: 3
+
+  revisit:
+    enabled: true
+    max_daily_items: 2
+    prefer_recently_referenced: true
+
+  backfill:
+    enabled: true
+    canonical_map: "configs/canonical_map.yaml"
+    max_daily_items: 2
+
+  adaptation:
+    enabled: true
+    topic_weight_adjustment_cap: 0.15
+    decay_factor: 0.9
+
+# 旧版字段仍可用，便于平滑迁移。
 triage_policy:
-  # 最终进入阅读队列的目标数量上限。
-  shortlist_size: 12
+  shortlist_size: 10
   score_weights:
-    # 主题匹配度权重。
     topical_fit: 0.40
-    # 新近性权重。
     freshness: 0.20
-    # 影响力权重，通常来自 citation / influential citation 信号。
     impact: 0.25
-    # 方法信号权重，用于提升有明显方法贡献的论文。
     method_signal: 0.15
 
-# 单篇论文 dossier 的生成策略。
 dossier_policy:
-  # 图像策略；source-first 会优先尝试源码/可用资源，再回退到其他方式。
   figure_mode: "source-first"
-  # dossier 主文档默认包含哪些章节。
   include_sections:
     - "snapshot"
     - "claims"
     - "evidence"
     - "questions"
-  # 引用表现形式；inline-links 会直接在文中放链接。
   citation_style: "inline-links"
-  # dossier 摘要长度档位。
   summary_length: "medium"
-  # 最多保留多少张图像。
   max_figures: 12
 
-# dossier 与本地知识库建立关联时的策略。
 synthesis_policy:
-  # 是否尝试给已有笔记建立 backlink。
   backlinking: true
-  # 最多保留多少条高相关 backlink。
   max_backlinks: 8
-  # relation 分数低于这个值时不写入 relations.json。
   relation_score_threshold: 0.2
-  # 允许写入的 relation 类型白名单。
   relation_types:
     - "extends"
     - "references"
     - "shares_topic"
     - "same_method_family"
-  # 建立链接时使用的策略名。
   link_strategy: "keyword-first"
-  # 全局 relation 图文件路径。
   relation_store: "runtime/artifacts/relations.json"
 
-# 运行时目录和执行行为。
 runtime:
-  # 可丢弃缓存目录。
   cache_dir: "runtime/cache"
-  # 单次运行的中间产物目录。
   run_dir: "runtime/runs"
-  # 需要长期保留的稳定产物目录。
   artifact_dir: "runtime/artifacts"
-  # 日志输出目录。
   log_dir: "runtime/logs"
-  # 默认日志级别。
   log_level: "INFO"
-  # 网络请求失败后的最大重试次数。
   retry_limit: 3
-  # 单次请求超时时间，单位秒。
   request_timeout_seconds: 20
-  # 候选论文去重策略。
   dedupe_strategy: "paper_id_then_title"
