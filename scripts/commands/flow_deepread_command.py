@@ -3,6 +3,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from runtime_bootstrap import maybe_reexec_for_runtime
+
+maybe_reexec_for_runtime(__file__)
+
 from command_common import (
     build_deepread_note,
     console_summary,
