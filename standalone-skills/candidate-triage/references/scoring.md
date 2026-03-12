@@ -1,35 +1,36 @@
-# 评分说明
+# 评分与路由说明
 
-当前 triage 阶段由四类分数组成：
+## 基础评分维度
+
+`final_base_score` 由以下组件与权重计算：
 
 - `topical_fit`
-- `freshness`
 - `impact`
+- `recency`
 - `method_signal`
+- `knowledge_gain`
+- `bridge_value`
+- `actionability`
+- `redundancy_penalty`（惩罚项）
 
-## 作用
+## 处理流程
 
-- `topical_fit`：判断与研究画像的匹配度
-- `freshness`：判断发布时间是否足够新
-- `impact`：判断引用或高影响力指标
-- `method_signal`：判断摘要里是否出现方法、实验和结果信号
+1. 基础评分
+2. 去重（硬去重 + 近似去重）
+3. 主题多样性筛选
+4. 来源感知路由（source-aware routing）
+5. 分桶输出（must_read / trend_watch / gap_fill）
 
-## 来源
+## 来源感知路由规则（首版默认）
 
-- 默认权重来自 `workflow.yaml -> triage_policy.score_weights`
-- profile 覆盖来自 `profiles.yaml -> scoring_overrides`
+- `arxiv` 可进入 `must_read/trend_watch/gap_fill`
+- `semantic_scholar` 默认仅可进入 `trend_watch/gap_fill`
+- `semantic_scholar` 默认禁止直接进入 `must_read`
 
-## 非黑箱输出字段
+## 可解释输出
 
-- `score_breakdown`：记录四类分项分数
-- `decision`：`selected` 或 `rejected`
-- `decision_reasons`：拒绝或入选原因代码
-- `dedupe_group_id`：去重分组键
+每条推荐都应可解释：
 
-## 去重优先级
-
-- 优先按 `paper_id`
-- 缺少 `paper_id` 时按标题 slug
-- 同组只保留最高分项，其余记录以拒绝项形式保留
-
-更细的字段定义以项目主文档 [docs/data-models.md](../../../../docs/data-models.md) 为准。
+- 为什么进入当前桶（`bucket_routing_reason`）
+- 为什么该来源被选中（`source_selection_reason`）
+- 为什么未进入 must_read（如受来源限制）

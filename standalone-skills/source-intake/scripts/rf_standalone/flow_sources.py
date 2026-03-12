@@ -15,10 +15,13 @@ except ImportError:  # pragma: no cover
 
 from rf_standalone.flow_common import (
     canonical_paper_id,
+    days_since,
     now_utc,
+    source_strategy_settings,
     term_hits,
     utc_timestamp,
 )
+from rf_standalone.semantic_scholar_adapter import build_record as build_semantic_scholar_record
 
 ARXIV_NS = {
     "atom": "http://www.w3.org/2005/Atom",
@@ -63,12 +66,13 @@ def _request(
 
 
 def fetch_arxiv_candidates(workflow: Dict[str, Any], profile: Dict[str, Any]) -> List[Dict[str, Any]]:
-    arxiv_config = workflow.get("sources", {}).get("arxiv", {})
+    source_settings = source_strategy_settings(workflow)
+    arxiv_config = source_settings.get("sources", {}).get("arxiv", {})
     if not arxiv_config.get("enabled", False):
         return []
 
     categories = arxiv_config.get("categories", [])
-    lookback_days = int(arxiv_config.get("lookback_days", 30))
+    lookback_days = int(arxiv_config.get("default_window_days", arxiv_config.get("lookback_days", 30)) or 30)
     max_results = int(min(arxiv_config.get("max_results", 100), profile.get("max_candidates", 100)))
     if not categories:
         return []
@@ -98,10 +102,15 @@ def fetch_arxiv_candidates(workflow: Dict[str, Any], profile: Dict[str, Any]) ->
     entries: List[Dict[str, Any]] = []
     fetched_at = utc_timestamp()
     include_terms = profile.get("include_terms", [])
+    source_roles = arxiv_config.get("role", ["fresh_discovery"])
+    if isinstance(source_roles, str):
+        source_roles = [source_roles]
+    source_role = str(source_roles[0]).strip() if source_roles else "fresh_discovery"
     for entry in root.findall("atom:entry", ARXIV_NS):
         title = (entry.findtext("atom:title", default="", namespaces=ARXIV_NS) or "").strip()
         abstract = (entry.findtext("atom:summary", default="", namespaces=ARXIV_NS) or "").strip()
         source_url = (entry.findtext("atom:id", default="", namespaces=ARXIV_NS) or "").strip()
+        published_at = entry.findtext("atom:published", default="", namespaces=ARXIV_NS)
         authors = [
             author.findtext("atom:name", default="", namespaces=ARXIV_NS)
             for author in entry.findall("atom:author", ARXIV_NS)
@@ -120,17 +129,24 @@ def fetch_arxiv_candidates(workflow: Dict[str, Any], profile: Dict[str, Any]) ->
                 "profile_id": profile["profile_id"],
                 "paper_id": paper_id,
                 "source": "arxiv",
+                "source_role": source_role or "fresh_discovery",
                 "source_record_id": source_url,
                 "title": title,
                 "abstract": abstract,
                 "authors": [author for author in authors if author],
-                "published_at": entry.findtext("atom:published", default="", namespaces=ARXIV_NS),
+                "published_at": published_at,
                 "updated_at": entry.findtext("atom:updated", default="", namespaces=ARXIV_NS),
                 "categories": [value for value in categories_found if value],
+                "fields_of_study": [value for value in categories_found if value],
                 "source_url": source_url,
                 "pdf_url": pdf_url,
+                "publication_year": int(published_at[:4]) if published_at and len(published_at) >= 4 and published_at[:4].isdigit() else None,
+                "venue": "arXiv",
+                "paper_type": "preprint",
                 "citation_count": 0,
                 "influential_citation_count": 0,
+                "recent_citation_velocity": None,
+                "recency_days": days_since(published_at),
                 "profile_hits": term_hits(combined_text, include_terms),
                 "state": "discovered",
                 "fetched_at": fetched_at,
@@ -143,7 +159,8 @@ def fetch_semantic_scholar_candidates(
     workflow: Dict[str, Any],
     profile: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
-    source_config = workflow.get("sources", {}).get("semantic_scholar", {})
+    source_settings = source_strategy_settings(workflow)
+    source_config = source_settings.get("sources", {}).get("semantic_scholar", {})
     if not source_config.get("enabled", False):
         return []
 
@@ -168,15 +185,21 @@ def fetch_semantic_scholar_candidates(
             "limit": min(int(source_config.get("max_results", 40)), int(profile.get("max_candidates", 40))),
             "fields": ",".join(
                 [
+                    "paperId",
                     "title",
                     "abstract",
                     "publicationDate",
+                    "year",
                     "citationCount",
                     "influentialCitationCount",
                     "authors",
                     "url",
+                    "openAccessPdf",
                     "externalIds",
                     "fieldsOfStudy",
+                    "venue",
+                    "publicationVenue",
+                    "publicationTypes",
                 ]
             ),
         },
@@ -187,35 +210,27 @@ def fetch_semantic_scholar_candidates(
     )
 
     fetched_at = utc_timestamp()
+    history_window_days = int(source_config.get("default_window_days", source_config.get("history_window_days", 365)) or 365)
     records: List[Dict[str, Any]] = []
     for item in payload.get("data", []):
-        title = item.get("title") or ""
-        abstract = item.get("abstract") or ""
-        if not title or not abstract:
+        if not isinstance(item, dict):
             continue
-        external_ids = item.get("externalIds") or {}
-        source_record_id = external_ids.get("ArXiv") or item.get("url") or title
-        paper_id = canonical_paper_id(source_record_id, "semantic-scholar")
-        records.append(
-            {
-                "run_id": "",
-                "profile_id": profile["profile_id"],
-                "paper_id": paper_id,
-                "source": "semantic_scholar",
-                "source_record_id": source_record_id,
-                "title": title,
-                "abstract": abstract,
-                "authors": [author.get("name") for author in item.get("authors", []) if author.get("name")],
-                "published_at": item.get("publicationDate") or "",
-                "updated_at": item.get("publicationDate") or "",
-                "categories": item.get("fieldsOfStudy") or [],
-                "source_url": item.get("url") or "",
-                "pdf_url": "",
-                "citation_count": int(item.get("citationCount") or 0),
-                "influential_citation_count": int(item.get("influentialCitationCount") or 0),
-                "profile_hits": term_hits(f"{title}\n{abstract}", include_terms),
-                "state": "discovered",
-                "fetched_at": fetched_at,
-            }
+        record = build_semantic_scholar_record(
+            item,
+            profile_id=profile["profile_id"],
+            include_terms=include_terms,
+            history_window_days=history_window_days,
+            fetched_at=fetched_at,
         )
+        if record is None:
+            continue
+        records.append(record)
+    records.sort(
+        key=lambda item: (
+            float(item.get("hotness_score", 0.0) or 0.0),
+            float(item.get("influential_citation_count", 0) or 0),
+            float(item.get("citation_count", 0) or 0),
+        ),
+        reverse=True,
+    )
     return records

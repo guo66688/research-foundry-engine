@@ -21,10 +21,13 @@
 - `dedupe_strategy`
 - `weights`
 - `stats`
+- `source_routing_policy`
+- `source_mix_summary`
+- `buckets`
 - `selected`
 - `rejected`
 
-## `selected` 与 `rejected` 每项至少包含
+## `selected` / `rejected` 关键字段
 
 - `paper_id`
 - `title`
@@ -34,5 +37,9 @@
 - `tier`
 - `decision`
 - `decision_reasons`
+- `source`
+- `source_role`
+- `bucket_routing_reason`
+- `source_selection_reason`
 - `dedupe_group_id`
 - `reason`

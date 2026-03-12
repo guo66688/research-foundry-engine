@@ -57,13 +57,21 @@ SKILL_SPECS = {
                 "scripts/flow_intake_fetch.py",
                 ("ROOT = Path(__file__).resolve().parents[2]", "ROOT = Path(__file__).resolve().parent"),
                 ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+                ("from scripts.lib.source_pools import", "from rf_standalone.source_pools import"),
                 ("from scripts.shared.flow_sources import", "from rf_standalone.flow_sources import"),
             ),
             _file_spec("scripts/shared/flow_common.py", "scripts/rf_standalone/flow_common.py"),
+            _file_spec("scripts/lib/source_pools.py", "scripts/rf_standalone/source_pools.py"),
+            _file_spec(
+                "scripts/lib/semantic_scholar_adapter.py",
+                "scripts/rf_standalone/semantic_scholar_adapter.py",
+                ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+            ),
             _file_spec(
                 "scripts/shared/flow_sources.py",
                 "scripts/rf_standalone/flow_sources.py",
                 ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+                ("from scripts.lib.semantic_scholar_adapter import", "from rf_standalone.semantic_scholar_adapter import"),
             ),
         ),
     ),
@@ -85,6 +93,7 @@ SKILL_SPECS = {
                 ("from scripts.lib.knowledge_inventory import", "from rf_standalone.knowledge_inventory import"),
                 ("from scripts.lib.paper_similarity import", "from rf_standalone.paper_similarity import"),
                 ("from scripts.lib.profile_adaptation import", "from rf_standalone.profile_adaptation import"),
+                ("from scripts.lib.source_routing import", "from rf_standalone.source_routing import"),
                 ("from scripts.lib.triage_diversity import", "from rf_standalone.triage_diversity import"),
                 ("from scripts.lib.triage_scoring import", "from rf_standalone.triage_scoring import"),
             ),
@@ -108,6 +117,10 @@ SKILL_SPECS = {
                 "scripts/lib/profile_adaptation.py",
                 "scripts/rf_standalone/profile_adaptation.py",
                 ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+            ),
+            _file_spec(
+                "scripts/lib/source_routing.py",
+                "scripts/rf_standalone/source_routing.py",
             ),
             _file_spec(
                 "scripts/lib/triage_diversity.py",
@@ -148,6 +161,12 @@ SKILL_SPECS = {
             _file_spec(
                 "scripts/shared/flow_sources.py",
                 "scripts/rf_standalone/flow_sources.py",
+                ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
+                ("from scripts.lib.semantic_scholar_adapter import", "from rf_standalone.semantic_scholar_adapter import"),
+            ),
+            _file_spec(
+                "scripts/lib/semantic_scholar_adapter.py",
+                "scripts/rf_standalone/semantic_scholar_adapter.py",
                 ("from scripts.shared.flow_common import", "from rf_standalone.flow_common import"),
             ),
         ),
