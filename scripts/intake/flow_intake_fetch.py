@@ -17,33 +17,18 @@ from scripts.shared.flow_common import (  # noqa: E402
     make_run_id,
     resolve_runtime_path,
     select_profile,
+    source_strategy_settings,
     utc_timestamp,
     write_json,
     write_jsonl,
 )
+from scripts.lib.source_pools import build_source_pools, dedupe_records, merge_for_candidate_pool  # noqa: E402
 from scripts.shared.flow_sources import (  # noqa: E402
     fetch_arxiv_candidates,
     fetch_semantic_scholar_candidates,
 )
 
 LOGGER = logging.getLogger("flow_intake_fetch")
-
-
-def dedupe_candidates(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
-    seen_by_paper = {}
-    seen_by_title = {}
-    for record in records:
-        paper_key = record.get("paper_id", "")
-        title_key = record.get("title", "").strip().lower()
-        if paper_key and paper_key not in seen_by_paper:
-            seen_by_paper[paper_key] = True
-            output.append(record)
-            continue
-        if not paper_key and title_key and title_key not in seen_by_title:
-            seen_by_title[title_key] = True
-            output.append(record)
-    return output
 
 
 def collect_source_records(
@@ -108,18 +93,31 @@ def main() -> int:
     run_id = args.run_id or make_run_id()
     run_dir = ensure_dir(resolve_runtime_path(workflow, "run") / run_id)
     output_path = Path(args.output) if args.output else run_dir / "candidate_pool.jsonl"
+    fresh_pool_path = run_dir / "fresh_pool.jsonl"
+    hot_pool_path = run_dir / "hot_pool.jsonl"
     manifest_path = run_dir / "run_manifest.json"
 
-    source_scope = list(profile.get("source_scope") or ["arxiv", "semantic_scholar"])
+    source_strategy = source_strategy_settings(workflow)
+    source_config = source_strategy.get("sources", {})
+    enabled_sources = [name for name, payload in source_config.items() if isinstance(payload, dict) and payload.get("enabled", False)]
+    source_scope = list(profile.get("source_scope") or enabled_sources or ["arxiv"])
     records, source_status, warnings = collect_source_records(workflow, profile, source_scope)
 
     for record in records:
         record["run_id"] = run_id
 
-    unique_records = dedupe_candidates(records)
+    source_pools = build_source_pools(records)
+    fresh_pool = dedupe_records(source_pools.get("fresh_pool", []))
+    hot_pool = dedupe_records(source_pools.get("hot_pool", []))
+    unique_records = merge_for_candidate_pool({"fresh_pool": fresh_pool, "hot_pool": hot_pool})
     source_counts = {
         source_name: int(payload.get("candidate_count", 0))
         for source_name, payload in source_status.items()
+    }
+    pool_counts = {
+        "fresh_pool_count": len(fresh_pool),
+        "hot_pool_count": len(hot_pool),
+        "candidate_pool_count": len(unique_records),
     }
     manifest_payload = {
         "run_id": run_id,
@@ -130,6 +128,7 @@ def main() -> int:
         "source_counts": source_counts,
         "source_status": source_status,
         "warnings": warnings,
+        "source_pools": pool_counts,
         "candidate_count": len(unique_records),
     }
 
@@ -146,18 +145,28 @@ def main() -> int:
         LOGGER.error("source_status=%s", source_status)
         return 1
 
+    write_jsonl(fresh_pool_path, fresh_pool)
+    write_jsonl(hot_pool_path, hot_pool)
     write_jsonl(output_path, unique_records)
     write_json(
         manifest_path,
         {
             **manifest_payload,
             "status": "completed",
-            "artifacts": [{"kind": "candidate_pool", "path": str(output_path)}],
+            "artifacts": [
+                {"kind": "fresh_pool", "path": str(fresh_pool_path)},
+                {"kind": "hot_pool", "path": str(hot_pool_path)},
+                {"kind": "candidate_pool", "path": str(output_path)},
+            ],
         },
     )
 
     LOGGER.info("run_id=%s", run_id)
+    LOGGER.info("fresh_pool=%s", fresh_pool_path)
+    LOGGER.info("hot_pool=%s", hot_pool_path)
     LOGGER.info("candidate_pool=%s", output_path)
+    LOGGER.info("fresh_pool_count=%d", len(fresh_pool))
+    LOGGER.info("hot_pool_count=%d", len(hot_pool))
     LOGGER.info("candidate_count=%d", len(unique_records))
     return 0
 

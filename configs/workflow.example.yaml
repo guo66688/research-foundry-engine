@@ -7,19 +7,64 @@ workspace:
 sources:
   arxiv:
     enabled: true
+    role:
+      - "fresh_discovery"
+    default_window_days: 30
+    preferred_buckets:
+      - "must_read"
+      - "trend_watch"
+      - "gap_fill"
     categories:
       - "cs.AI"
       - "cs.LG"
       - "cs.CL"
+    # 兼容旧字段：仍可使用 lookback_days。
     lookback_days: 30
     max_results: 120
+
   semantic_scholar:
     enabled: false
+    role:
+      - "trend_support"
+      - "hot_backfill"
+    default_window_days: 365
+    preferred_buckets:
+      - "trend_watch"
+      - "gap_fill"
+    restricted_buckets:
+      - "must_read"
     api_key_env: "SEMANTIC_SCHOLAR_API_KEY"
+    # 兼容旧字段：仍可使用 history_window_days。
     history_window_days: 365
     max_results: 40
 
-# 新版推荐配置。代码仍兼容旧的 triage_policy 结构。
+# 来源感知分桶策略：先算基础分，再按来源角色路由到桶。
+bucket_strategy:
+  must_read:
+    prefer_sources:
+      - "arxiv"
+    max_semantic_scholar_items: 0
+
+  trend_watch:
+    prefer_sources:
+      - "arxiv"
+      - "semantic_scholar"
+    target_mix:
+      arxiv: 0.5
+      semantic_scholar: 0.5
+
+  gap_fill:
+    prefer_sources:
+      - "arxiv"
+      - "semantic_scholar"
+    max_semantic_scholar_items: 2
+
+  review_or_backfill:
+    prefer_sources:
+      - "local_inventory"
+      - "canonical_map"
+
+# 新版 triage 配置；代码仍兼容旧 triage_policy。
 triage:
   scoring:
     weights:
@@ -52,7 +97,7 @@ triage:
       systems: 1
 
   inventory:
-    # 默认只扫 research/papers；daily recommendations 作为弱信号可配置启用。
+    # 默认扫描 strong knowledge；可开启 daily recommendations 作为弱信号。
     enable_daily_recommendations: true
     recent_window_days: 90
 

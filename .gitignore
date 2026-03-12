@@ -18,6 +18,11 @@ venv/
 env/
 
 # Local runtime outputs
+runtime/*
+!runtime/artifacts/
+!runtime/cache/
+!runtime/logs/
+!runtime/runs/
 runtime/artifacts/*
 runtime/cache/*
 runtime/logs/*
@@ -36,3 +41,4 @@ configs/profiles.yaml
 Thumbs.db
 .idea/
 .vscode/
+.tmp/

@@ -40,3 +40,7 @@
 - 默认使用入口：Vault `AGENTS.md` 中的中文命令
 - 默认运行环境：固定虚拟环境 `research-foundry-standalone`
 - 默认存储策略：Vault 只放 Markdown 和图片，runtime 放到 Vault 外
+
+## 2026-03 新增文档
+
+- [source-routing.md](source-routing.md): 来源角色化、分池与分桶路由设计。

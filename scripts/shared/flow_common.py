@@ -178,6 +178,136 @@ def merged_weights(base: Dict[str, float], override: Dict[str, float]) -> Dict[s
     return {name: value / total for name, value in merged.items()}
 
 
+def source_strategy_settings(workflow: Dict[str, Any]) -> Dict[str, Any]:
+    sources_block = workflow.get("sources", {})
+    if not isinstance(sources_block, dict):
+        sources_block = {}
+    bucket_strategy_block = workflow.get("bucket_strategy", {})
+    if not isinstance(bucket_strategy_block, dict):
+        bucket_strategy_block = {}
+
+    source_defaults: Dict[str, Dict[str, Any]] = {
+        "arxiv": {
+            "enabled": True,
+            "role": ["fresh_discovery"],
+            "default_window_days": 30,
+            "preferred_buckets": ["must_read", "trend_watch", "gap_fill"],
+            "restricted_buckets": [],
+        },
+        "semantic_scholar": {
+            "enabled": False,
+            "role": ["trend_support", "hot_backfill"],
+            "default_window_days": 365,
+            "preferred_buckets": ["trend_watch", "gap_fill"],
+            "restricted_buckets": ["must_read"],
+        },
+    }
+
+    resolved_sources: Dict[str, Dict[str, Any]] = {}
+    known_sources = sorted(set(list(source_defaults.keys()) + list(sources_block.keys())))
+    for source_name in known_sources:
+        raw_block = sources_block.get(source_name, {})
+        if not isinstance(raw_block, dict):
+            raw_block = {}
+        defaults = source_defaults.get(source_name, {})
+        role_value = raw_block.get("role", defaults.get("role", []))
+        if isinstance(role_value, str):
+            role_value = [role_value]
+        if not isinstance(role_value, list):
+            role_value = list(defaults.get("role", []))
+        roles = [str(item) for item in role_value if str(item).strip()]
+
+        if source_name == "arxiv":
+            window_days = int(raw_block.get("default_window_days", raw_block.get("lookback_days", defaults.get("default_window_days", 30))) or 30)
+        elif source_name == "semantic_scholar":
+            window_days = int(
+                raw_block.get(
+                    "default_window_days",
+                    raw_block.get("history_window_days", defaults.get("default_window_days", 365)),
+                )
+                or 365
+            )
+        else:
+            window_days = int(raw_block.get("default_window_days", defaults.get("default_window_days", 30)) or 30)
+
+        preferred = raw_block.get("preferred_buckets", defaults.get("preferred_buckets", []))
+        if isinstance(preferred, str):
+            preferred = [preferred]
+        if not isinstance(preferred, list):
+            preferred = list(defaults.get("preferred_buckets", []))
+
+        restricted = raw_block.get("restricted_buckets", defaults.get("restricted_buckets", []))
+        if isinstance(restricted, str):
+            restricted = [restricted]
+        if not isinstance(restricted, list):
+            restricted = list(defaults.get("restricted_buckets", []))
+
+        resolved_block = dict(raw_block)
+        resolved_block["enabled"] = bool(raw_block.get("enabled", defaults.get("enabled", False)))
+        resolved_block["role"] = roles
+        resolved_block["default_window_days"] = window_days
+        resolved_block["preferred_buckets"] = [str(item) for item in preferred if str(item).strip()]
+        resolved_block["restricted_buckets"] = [str(item) for item in restricted if str(item).strip()]
+        if source_name == "arxiv":
+            resolved_block.setdefault("lookback_days", window_days)
+        if source_name == "semantic_scholar":
+            resolved_block.setdefault("history_window_days", window_days)
+        resolved_sources[source_name] = resolved_block
+
+    bucket_defaults: Dict[str, Dict[str, Any]] = {
+        "must_read": {
+            "prefer_sources": ["arxiv"],
+            "max_semantic_scholar_items": 0,
+        },
+        "trend_watch": {
+            "prefer_sources": ["arxiv", "semantic_scholar"],
+            "target_mix": {
+                "arxiv": 0.5,
+                "semantic_scholar": 0.5,
+            },
+        },
+        "gap_fill": {
+            "prefer_sources": ["arxiv", "semantic_scholar"],
+            "max_semantic_scholar_items": 2,
+        },
+        "review_or_backfill": {
+            "prefer_sources": ["local_inventory", "canonical_map"],
+        },
+    }
+    resolved_bucket_strategy: Dict[str, Dict[str, Any]] = {}
+    known_buckets = sorted(set(list(bucket_defaults.keys()) + list(bucket_strategy_block.keys())))
+    for bucket_name in known_buckets:
+        raw_bucket = bucket_strategy_block.get(bucket_name, {})
+        if not isinstance(raw_bucket, dict):
+            raw_bucket = {}
+        defaults = bucket_defaults.get(bucket_name, {})
+        prefer_sources = raw_bucket.get("prefer_sources", defaults.get("prefer_sources", []))
+        if isinstance(prefer_sources, str):
+            prefer_sources = [prefer_sources]
+        if not isinstance(prefer_sources, list):
+            prefer_sources = list(defaults.get("prefer_sources", []))
+        target_mix = raw_bucket.get("target_mix", defaults.get("target_mix", {}))
+        if not isinstance(target_mix, dict):
+            target_mix = dict(defaults.get("target_mix", {}))
+        resolved_bucket = dict(raw_bucket)
+        resolved_bucket["prefer_sources"] = [str(item) for item in prefer_sources if str(item).strip()]
+        resolved_bucket["target_mix"] = {
+            str(source_name): float(value)
+            for source_name, value in target_mix.items()
+            if str(source_name).strip()
+        }
+        if "max_semantic_scholar_items" in raw_bucket:
+            resolved_bucket["max_semantic_scholar_items"] = int(raw_bucket.get("max_semantic_scholar_items", 0) or 0)
+        elif "max_semantic_scholar_items" in defaults:
+            resolved_bucket["max_semantic_scholar_items"] = int(defaults.get("max_semantic_scholar_items", 0) or 0)
+        resolved_bucket_strategy[bucket_name] = resolved_bucket
+
+    return {
+        "sources": resolved_sources,
+        "bucket_strategy": resolved_bucket_strategy,
+    }
+
+
 def triage_settings(workflow: Dict[str, Any]) -> Dict[str, Any]:
     triage_block = workflow.get("triage")
     legacy_block = workflow.get("triage_policy", {})
@@ -271,6 +401,7 @@ def triage_settings(workflow: Dict[str, Any]) -> Dict[str, Any]:
         "topic_weight_adjustment_cap": float(adaptation_block.get("topic_weight_adjustment_cap", 0.15) or 0.15),
         "decay_factor": float(adaptation_block.get("decay_factor", 0.9) or 0.9),
     }
+    source_strategy = source_strategy_settings(workflow)
     return {
         "weights": weights,
         "shortlist": shortlist,
@@ -282,6 +413,7 @@ def triage_settings(workflow: Dict[str, Any]) -> Dict[str, Any]:
         "revisit": revisit,
         "backfill": backfill,
         "adaptation": adaptation,
+        "source_strategy": source_strategy,
     }
 
 

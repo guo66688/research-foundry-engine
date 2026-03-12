@@ -224,3 +224,39 @@
 - `references`
 - `shares_topic`
 - `same_method_family`
+
+## 2026-03 来源角色化数据扩展
+
+### intake 输出扩展
+
+新增运行产物：
+
+- `runtime/runs/<run_id>/fresh_pool.jsonl`
+- `runtime/runs/<run_id>/hot_pool.jsonl`
+
+`candidate_pool.jsonl` 继续保留，作为兼容总池。
+
+### candidate 记录扩展字段
+
+- `source_role`
+- `source_pool`
+- `recency_days`
+- `publication_year`
+- `fields_of_study`
+- `venue`
+- `paper_type`
+- `recent_citation_velocity`
+
+### triage 结果扩展字段
+
+在 `selected/rejected` 项中新增：
+
+- `source`
+- `source_role`
+- `bucket_routing_reason`
+- `source_selection_reason`
+
+在 `triage_result.json` 顶层新增：
+
+- `source_routing_policy`
+- `source_mix_summary`

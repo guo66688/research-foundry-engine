@@ -1402,6 +1402,32 @@ def prepare_today_materials(
 ) -> Dict[str, Any]:
     selected = list(triage_payload.get("selected", []))
     bucket_payload = queue_plan.get("final_buckets", triage_payload.get("buckets", {}) or {})
+    source_mix_summary: Dict[str, Dict[str, int]] = {}
+    for bucket_name in ["must_read", "trend_watch", "gap_fill"]:
+        counts: Dict[str, int] = {"arxiv": 0, "semantic_scholar": 0}
+        for item in bucket_payload.get(bucket_name, []) or []:
+            source_name = str(item.get("source", "")).strip()
+            if source_name not in counts:
+                counts[source_name] = 0
+            counts[source_name] += 1
+        source_mix_summary[bucket_name] = counts
+
+    source_pool_payload = manifest_payload.get("source_pools", {}) if isinstance(manifest_payload.get("source_pools", {}), dict) else {}
+    fresh_pool_count = int(source_pool_payload.get("fresh_pool_count", 0) or 0)
+    hot_pool_count = int(source_pool_payload.get("hot_pool_count", 0) or 0)
+    fresh_pool_path = intake.get("fresh_pool")
+    hot_pool_path = intake.get("hot_pool")
+    if fresh_pool_count <= 0 and isinstance(fresh_pool_path, Path) and fresh_pool_path.exists():
+        fresh_pool_count = len(read_jsonl(fresh_pool_path))
+    if hot_pool_count <= 0 and isinstance(hot_pool_path, Path) and hot_pool_path.exists():
+        hot_pool_count = len(read_jsonl(hot_pool_path))
+
+    queue_decisions_data: List[Dict[str, Any]] = []
+    raw_queue_decisions_path = str(queue_plan.get("queue_decisions_path", "") or "")
+    if raw_queue_decisions_path:
+        queue_payload = read_json(Path(raw_queue_decisions_path), default={}) or {}
+        queue_decisions_data = list(queue_payload.get("decisions", []))
+
     deepread_plan = {
         "must_read_top2": [item.get("paper_id", "") for item in bucket_payload.get("must_read", [])[:2]],
         "gap_fill_top1": [item.get("paper_id", "") for item in bucket_payload.get("gap_fill", [])[:1]],
@@ -1469,6 +1495,8 @@ def prepare_today_materials(
                 "abstract": item.get("abstract", ""),
                 "categories": list(item.get("categories", [])),
                 "published_at": item.get("published_at", ""),
+                "source": item.get("source", ""),
+                "source_role": item.get("source_role", ""),
                 "source_url": item.get("source_url", ""),
                 "pdf_url": item.get("pdf_url", ""),
                 "knowledge_gain": item.get("score_breakdown", {}).get("knowledge_gain", 0.0),
@@ -1476,6 +1504,8 @@ def prepare_today_materials(
                 "bridge_value": item.get("score_breakdown", {}).get("bridge_value", 0.0),
                 "bucket_hint": item.get("bucket_hint", ""),
                 "recommendation_bucket": item.get("recommendation_bucket", ""),
+                "bucket_routing_reason": item.get("bucket_routing_reason", ""),
+                "source_selection_reason": item.get("source_selection_reason", ""),
                 "suggested_action": item.get("suggested_action", ""),
                 "suggested_action_reason": item.get("suggested_action_reason", ""),
                 "explain": item.get("explain", {}),
@@ -1492,6 +1522,8 @@ def prepare_today_materials(
         "template_path": str(template_path),
         "target_note_path": str(target_daily_path),
         "candidate_pool_path": str(intake["candidate_pool"]),
+        "fresh_pool_path": str(intake.get("fresh_pool", "")),
+        "hot_pool_path": str(intake.get("hot_pool", "")),
         "triage_result_path": str(triage["triage_result"]),
         "reading_queue_path": str(triage["reading_queue"]) if triage.get("reading_queue") else "",
         "manifest_path": str(intake["candidate_pool"].parent / "run_manifest.json"),
@@ -1499,6 +1531,10 @@ def prepare_today_materials(
         "candidate_count": triage_payload.get("stats", {}).get("input_count", 0),
         "shortlist_count": triage_payload.get("stats", {}).get("selected_count", 0),
         "source_status": manifest_payload.get("source_status", {}),
+        "source_pools": {
+            "fresh_pool_count": fresh_pool_count,
+            "hot_pool_count": hot_pool_count,
+        },
         "warnings": list(manifest_payload.get("warnings", []) or []),
         "shortlist": shortlist_payload,
         "must_read": bucket_payload.get("must_read", []),
@@ -1507,6 +1543,7 @@ def prepare_today_materials(
         "review_or_backfill": queue_plan.get("review_or_backfill", []),
         "deepread_picks": deepread_plan,
         "top_deepreads": prepared_deepreads,
+        "queue_decisions": queue_decisions_data,
         "knowledge_inventory_path": triage_payload.get("knowledge_inventory_path", ""),
         "knowledge_topic_stats_path": triage_payload.get("knowledge_topic_stats_path", ""),
         "triage_explanations_path": triage_payload.get("triage_explanations_path", ""),
@@ -1515,6 +1552,7 @@ def prepare_today_materials(
         "canonical_backfill_state_path": queue_plan.get("canonical_backfill_state_path", ""),
         "queue_decisions_path": queue_plan.get("queue_decisions_path", ""),
         "queue_summary": queue_plan.get("queue_summary", {}),
+        "source_mix_summary": source_mix_summary,
         "bucket_counts": {
             "must_read": len(bucket_payload.get("must_read", [])),
             "trend_watch": len(bucket_payload.get("trend_watch", [])),
@@ -1538,9 +1576,20 @@ def run_source_intake(backend: Backend, config_path: Path, profiles_path: Path, 
     )
     run_id = parse_logged_value(output, "run_id")
     candidate_pool = parse_logged_value(output, "candidate_pool")
+    fresh_pool = parse_logged_value(output, "fresh_pool")
+    hot_pool = parse_logged_value(output, "hot_pool")
     if not run_id or not candidate_pool:
         raise RuntimeError(f"source-intake did not return required outputs\n{output}")
-    return {"run_id": run_id, "candidate_pool": Path(candidate_pool), "raw_output": output}
+    run_dir = Path(candidate_pool).parent
+    fresh_pool_path = Path(fresh_pool) if fresh_pool else (run_dir / "fresh_pool.jsonl")
+    hot_pool_path = Path(hot_pool) if hot_pool else (run_dir / "hot_pool.jsonl")
+    return {
+        "run_id": run_id,
+        "candidate_pool": Path(candidate_pool),
+        "fresh_pool": fresh_pool_path,
+        "hot_pool": hot_pool_path,
+        "raw_output": output,
+    }
 
 
 def run_candidate_triage(

@@ -125,3 +125,21 @@ python scripts/registry/flow_registry_update.py --help
 - `~/.codex/skills/.internal/research-foundry/commands/` 是否存在
 - `.runtime/python.txt` 是否记录了有效 Python 路径
 - 固定 venv 是否安装了依赖
+
+## 2026-03 daily_context 扩展
+
+`daily_context-<run_id>.json` 新增以下结构：
+
+- `fresh_pool_path`
+- `hot_pool_path`
+- `source_pools.fresh_pool_count`
+- `source_pools.hot_pool_count`
+- `source_mix_summary`
+- `queue_decisions`
+
+并且推荐项中会保留来源路由解释：
+
+- `source`
+- `source_role`
+- `bucket_routing_reason`
+- `source_selection_reason`

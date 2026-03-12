@@ -137,3 +137,42 @@ Research Foundry 的核心配置仍然是两份 YAML：
 - `深读论文` 会读取 `workflow.yaml`，并在需要时用 `profiles.yaml`
 - `提取配图` 只依赖 `workflow.yaml`
 - `搜索论文` 只依赖 `workflow.yaml` 中的 `notes_root`
+
+## 2026-03 来源角色配置
+
+新增 `sources.<source>.role/default_window_days/preferred_buckets/restricted_buckets` 与 `bucket_strategy`。
+
+```yaml
+sources:
+  arxiv:
+    enabled: true
+    role: [fresh_discovery]
+    default_window_days: 30
+    preferred_buckets: [must_read, trend_watch, gap_fill]
+
+  semantic_scholar:
+    enabled: false
+    role: [trend_support, hot_backfill]
+    default_window_days: 365
+    preferred_buckets: [trend_watch, gap_fill]
+    restricted_buckets: [must_read]
+
+bucket_strategy:
+  must_read:
+    prefer_sources: [arxiv]
+    max_semantic_scholar_items: 0
+  trend_watch:
+    prefer_sources: [arxiv, semantic_scholar]
+    target_mix:
+      arxiv: 0.5
+      semantic_scholar: 0.5
+  gap_fill:
+    prefer_sources: [arxiv, semantic_scholar]
+    max_semantic_scholar_items: 2
+```
+
+### 向后兼容
+
+- 旧字段 `lookback_days/history_window_days` 仍可继续使用。
+- 未配置 `bucket_strategy` 时，会使用内置默认策略。
+- `semantic_scholar.enabled` 默认 `false`，默认行为与原先 arXiv 主流程保持一致。

@@ -46,7 +46,13 @@ def main() -> int:
     notes_root = resolve_notes_root(workflow, args.notes_root)
     if args.reuse_run_id:
         run_dir = Path(workflow.get("runtime", {}).get("run_dir", "runtime/runs")) / args.reuse_run_id
-        intake = {"run_id": args.reuse_run_id, "candidate_pool": run_dir / "candidate_pool.jsonl", "raw_output": ""}
+        intake = {
+            "run_id": args.reuse_run_id,
+            "candidate_pool": run_dir / "candidate_pool.jsonl",
+            "fresh_pool": run_dir / "fresh_pool.jsonl",
+            "hot_pool": run_dir / "hot_pool.jsonl",
+            "raw_output": "",
+        }
         triage_result_path = run_dir / "triage_result.json"
         if triage_result_path.exists():
             triage = {"triage_result": triage_result_path, "reading_queue": None, "raw_output": ""}
@@ -117,6 +123,8 @@ def main() -> int:
                 f"backend={backend.mode}",
                 f"run_id={triage_payload.get('run_id', '')}",
                 f"candidate_pool={intake['candidate_pool']}",
+                f"fresh_pool={intake.get('fresh_pool', '')}",
+                f"hot_pool={intake.get('hot_pool', '')}",
                 f"triage_result={triage['triage_result']}",
                 f"daily_context={prepared['context_path']}",
                 f"daily_template={prepared['template_path']}",

@@ -24,7 +24,8 @@ from scripts.lib.feedback_registry import (
 from scripts.lib.knowledge_inventory import compact_topic_stats, scan_knowledge_inventory
 from scripts.lib.paper_similarity import normalize_text, text_similarity
 from scripts.lib.profile_adaptation import adaptation_for_profile, compute_profile_adaptation, empty_adaptation_state
-from scripts.lib.triage_diversity import apply_diversity_constraints, assign_recommendation_buckets
+from scripts.lib.source_routing import build_source_routing_policy, route_records_to_buckets
+from scripts.lib.triage_diversity import apply_diversity_constraints
 from scripts.lib.triage_scoring import score_record
 from scripts.shared.flow_common import (  # noqa: E402
     ensure_dir,
@@ -60,6 +61,15 @@ def tier_record(index: int, shortlist_total: int) -> str:
     return "discard"
 
 
+def record_identity(record: Dict[str, Any]) -> str:
+    paper_id = str(record.get("paper_id", "")).strip()
+    if paper_id:
+        return paper_id
+    source_name = str(record.get("source", "")).strip().lower()
+    title = normalize_text(str(record.get("title", "")))
+    return f"{source_name}:{title}"
+
+
 def finalize_record(
     record: Dict[str, Any],
     *,
@@ -67,16 +77,30 @@ def finalize_record(
     decision_reasons: List[str],
     tier: str,
     recommendation_bucket: str = "",
+    bucket_routing_reason: str = "",
+    source_selection_reason: str = "",
 ) -> Dict[str, Any]:
     bundle = dict(record)
     bundle["tier"] = tier
     bundle["state"] = "triaged"
     bundle["decision"] = decision
     bundle["decision_reasons"] = decision_reasons
-    bundle["reason"] = "；".join(decision_reasons)
+    bundle["reason"] = " | ".join(decision_reasons)
     bundle["score_breakdown"] = dict(bundle.get("scores", {}).get("components", {}))
     if recommendation_bucket:
         bundle["recommendation_bucket"] = recommendation_bucket
+    if bucket_routing_reason:
+        bundle["bucket_routing_reason"] = bucket_routing_reason
+    if source_selection_reason:
+        bundle["source_selection_reason"] = source_selection_reason
+    bundle.setdefault("source", str(bundle.get("source") or ""))
+    bundle.setdefault("source_role", str(bundle.get("source_role") or ""))
+    bundle.setdefault("bucket_routing_reason", "")
+    bundle.setdefault("source_selection_reason", "")
+    explain_payload = dict(bundle.get("explain", {}))
+    explain_payload.setdefault("bucket_routing_reason", bundle["bucket_routing_reason"])
+    explain_payload.setdefault("source_selection_reason", bundle["source_selection_reason"])
+    bundle["explain"] = explain_payload
     return bundle
 
 
@@ -99,16 +123,18 @@ def write_reading_queue(path: Path, result: Dict[str, Any]) -> None:
         for index, item in enumerate(items, start=1):
             lines.append(f"### {index}. {item['title']}")
             lines.append(f"- paper_id: `{item['paper_id']}`")
+            lines.append(f"- source: `{item.get('source', '')}` / `{item.get('source_role', '')}`")
             lines.append(f"- score: `{item['scores']['total']}`")
             lines.append(f"- bucket_hint: `{item.get('bucket_hint', '')}`")
             lines.append(f"- suggested_action: `{item.get('suggested_action', '')}`")
+            lines.append(f"- bucket_routing_reason: {item.get('bucket_routing_reason', '')}")
             lines.append(f"- why_recommended: {item.get('explain', {}).get('why_recommended', '')}")
             lines.append("")
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
 
 
 def candidate_pool_dedupe(scored_records: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    # 先做硬去重（paper_id / 标题），再做当天候选内部的近似重复裁剪。
+    # 中文注释：先做硬去重（paper_id/标题），再做候选池内部近似去重。
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for item in scored_records:
         grouped.setdefault(item["dedupe_group_id"], []).append(item)
@@ -178,6 +204,10 @@ def build_explanation_index(records: List[Dict[str, Any]]) -> Dict[str, Dict[str
         str(item.get("paper_id", "")): {
             "score": item.get("scores", {}).get("total", item.get("score", 0.0)),
             "bucket_hint": item.get("bucket_hint", ""),
+            "source": item.get("source", ""),
+            "source_role": item.get("source_role", ""),
+            "bucket_routing_reason": item.get("bucket_routing_reason", ""),
+            "source_selection_reason": item.get("source_selection_reason", ""),
             "scores": item.get("scores", {}),
             "explain": item.get("explain", {}),
             "bridge_reasons": item.get("bridge_reasons", []),
@@ -187,6 +217,19 @@ def build_explanation_index(records: List[Dict[str, Any]]) -> Dict[str, Dict[str
         }
         for item in records
     }
+
+
+def bucket_source_mix(bucket_payload: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, int]]:
+    output: Dict[str, Dict[str, int]] = {}
+    for bucket_name in ["must_read", "trend_watch", "gap_fill"]:
+        source_counts: Dict[str, int] = {"arxiv": 0, "semantic_scholar": 0}
+        for item in bucket_payload.get(bucket_name, []):
+            source_name = str(item.get("source", "")).strip()
+            if source_name not in source_counts:
+                source_counts[source_name] = 0
+            source_counts[source_name] += 1
+        output[bucket_name] = source_counts
+    return output
 
 
 def main() -> int:
@@ -266,6 +309,12 @@ def main() -> int:
     scored: List[Dict[str, Any]] = []
     for record in records:
         bundle = dict(record)
+        if not str(bundle.get("source_role", "")).strip():
+            source_name = str(bundle.get("source", "")).strip()
+            if source_name == "arxiv":
+                bundle["source_role"] = "fresh_discovery"
+            elif source_name == "semantic_scholar":
+                bundle["source_role"] = "trend_support"
         score_payload = score_record(
             bundle,
             weights=weights,
@@ -310,30 +359,46 @@ def main() -> int:
         min_per_bucket=settings["diversity"]["min_per_bucket"],
         max_per_bucket=settings["diversity"]["max_per_bucket"],
     )
-    # shortlisted_records 已满足主题桶配额，下面再拆成 must_read / trend_watch / gap_fill 三桶。
+    # 中文注释：先满足主题多样性，再执行来源感知路由（不是统一混排后硬切片）。
     shortlisted_records = diversified["selected"]
-    bucketed = assign_recommendation_buckets(shortlisted_records, settings["shortlist"])
+    routing_policy = build_source_routing_policy(settings)
+    routed = route_records_to_buckets(
+        shortlisted_records,
+        shortlist_config=settings["shortlist"],
+        routing_policy=routing_policy,
+    )
+    bucketed = routed["buckets"]
+    routing_notes = routed["notes"]
 
     selected: List[Dict[str, Any]] = []
     selected_ids = set()
     for bucket_name in ["must_read", "trend_watch", "gap_fill"]:
         for record in bucketed[bucket_name]:
-            selected_ids.add(str(record.get("paper_id", "")))
+            record_key = record_identity(record)
+            selected_ids.add(record_key)
+            note = routing_notes.get(record_key, {})
             selected.append(
                 finalize_record(
                     record,
                     decision="selected",
-                    decision_reasons=["rank_within_shortlist", f"assigned_to_{bucket_name}"],
+                    decision_reasons=["rank_within_shortlist", f"assigned_to_{bucket_name}", f"source_routed_{record.get('source', 'unknown')}"],
                     tier="priority" if bucket_name == "must_read" else "watch",
                     recommendation_bucket=bucket_name,
+                    bucket_routing_reason=str(note.get("bucket_routing_reason", "")),
+                    source_selection_reason=str(note.get("source_selection_reason", "")),
                 )
             )
 
     rejected: List[Dict[str, Any]] = list(duplicate_rejected)
     for record in primary_records:
-        if str(record.get("paper_id", "")) in selected_ids:
+        record_key = record_identity(record)
+        if record_key in selected_ids:
             continue
         reasons = ["below_shortlist_threshold"]
+        note = routing_notes.get(record_key, {})
+        blocked_buckets = note.get("blocked_buckets", []) if isinstance(note, dict) else []
+        if blocked_buckets and "must_read" in blocked_buckets:
+            reasons.append("blocked_from_must_read_by_source_routing")
         if record in diversified["skipped"]:
             reasons.append("diversity_constraint_applied")
         rejected.append(
@@ -342,6 +407,8 @@ def main() -> int:
                 decision="rejected",
                 decision_reasons=reasons,
                 tier="discard",
+                bucket_routing_reason=str(note.get("bucket_routing_reason", "")) if isinstance(note, dict) else "",
+                source_selection_reason=str(note.get("source_selection_reason", "")) if isinstance(note, dict) else "",
             )
         )
 
@@ -350,6 +417,7 @@ def main() -> int:
         name: [item for item in selected if item.get("recommendation_bucket") == name]
         for name in ["must_read", "trend_watch", "gap_fill"]
     }
+    source_mix_summary = bucket_source_mix(bucket_payload)
     deepread_picks = {
         "must_read_top2": [item.get("paper_id", "") for item in bucket_payload["must_read"][: settings["deepread"]["must_read_top2"]]],
         "gap_fill_top1": [item.get("paper_id", "") for item in bucket_payload["gap_fill"][: settings["deepread"]["gap_fill_top1"]]],
@@ -363,6 +431,7 @@ def main() -> int:
         "paper_state_registry_path": str(runtime_paths["paper_state_registry"]),
         "profile_adaptation_state_path": str(runtime_paths["profile_adaptation_state"]),
         "active_adaptation": active_adaptation,
+        "source_routing_policy": routing_policy,
         "selected": build_explanation_index(selected),
         "rejected": build_explanation_index(rejected),
     }
@@ -389,6 +458,8 @@ def main() -> int:
         "paper_state_registry_path": str(runtime_paths["paper_state_registry"]),
         "profile_adaptation_state_path": str(runtime_paths["profile_adaptation_state"]),
         "bucket_counts": diversified["bucket_counts"],
+        "source_routing_policy": routing_policy,
+        "source_mix_summary": source_mix_summary,
         "buckets": bucket_payload,
         "deepread_picks": deepread_picks,
         "selected": selected,

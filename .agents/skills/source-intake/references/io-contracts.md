@@ -8,7 +8,9 @@
 
 ## 输出
 
-- `runtime/runs/<run_id>/candidate_pool.jsonl`
+- `runtime/runs/<run_id>/fresh_pool.jsonl`
+- `runtime/runs/<run_id>/hot_pool.jsonl`
+- `runtime/runs/<run_id>/candidate_pool.jsonl`（兼容总池）
 - `runtime/runs/<run_id>/run_manifest.json`
 
 ## `candidate_pool.jsonl` 关键字段
@@ -17,15 +19,13 @@
 - `profile_id`
 - `paper_id`
 - `source`
-- `source_record_id`
+- `source_role`
+- `source_pool`
 - `title`
 - `abstract`
 - `authors`
 - `published_at`
-- `updated_at`
 - `categories`
-- `source_url`
-- `pdf_url`
 - `citation_count`
 - `influential_citation_count`
 - `profile_hits`
@@ -44,4 +44,5 @@
 - `candidate_count`
 - `source_counts`
 - `source_status`
+- `source_pools`
 - `warnings`
