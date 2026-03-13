@@ -1,0 +1,145 @@
+{
+  "generated_at": "2026-03-12T00:00:00Z",
+  "stats": {
+    "note_count": 5,
+    "paper_count": 5,
+    "strong_note_count": 5,
+    "weak_note_count": 0
+  },
+  "paper_ids": [
+    "note-c-align-001",
+    "note-c-ms-001",
+    "note-c-ms-002",
+    "note-c-ms-003",
+    "note-c-ms-004"
+  ],
+  "records": [
+    {
+      "paper_id": "note-c-align-001",
+      "path": "tests\\fixtures\\source_routing\\sample_c_gap_fill_priority\\notes\\research\\papers\\note-c-align-001.md",
+      "title": "note-c-align-001",
+      "topics": [],
+      "bucket_topics": [
+        "general_llm"
+      ],
+      "knowledge_slots": [
+        "general_llm"
+      ],
+      "status": "",
+      "importance": "",
+      "follow_up": "",
+      "source": "",
+      "authors": [],
+      "source_type": "papers",
+      "evidence_strength": "strong_knowledge",
+      "summary": "",
+      "modified_at": "2026-03-12T00:00:00Z",
+      "published_at": ""
+    },
+    {
+      "paper_id": "note-c-ms-001",
+      "path": "tests\\fixtures\\source_routing\\sample_c_gap_fill_priority\\notes\\research\\papers\\note-c-ms-001.md",
+      "title": "note-c-ms-001",
+      "topics": [],
+      "bucket_topics": [
+        "general_llm"
+      ],
+      "knowledge_slots": [
+        "general_llm"
+      ],
+      "status": "",
+      "importance": "",
+      "follow_up": "",
+      "source": "",
+      "authors": [],
+      "source_type": "papers",
+      "evidence_strength": "strong_knowledge",
+      "summary": "",
+      "modified_at": "2026-03-12T00:00:00Z",
+      "published_at": ""
+    },
+    {
+      "paper_id": "note-c-ms-002",
+      "path": "tests\\fixtures\\source_routing\\sample_c_gap_fill_priority\\notes\\research\\papers\\note-c-ms-002.md",
+      "title": "note-c-ms-002",
+      "topics": [],
+      "bucket_topics": [
+        "general_llm"
+      ],
+      "knowledge_slots": [
+        "general_llm"
+      ],
+      "status": "",
+      "importance": "",
+      "follow_up": "",
+      "source": "",
+      "authors": [],
+      "source_type": "papers",
+      "evidence_strength": "strong_knowledge",
+      "summary": "",
+      "modified_at": "2026-03-12T00:00:00Z",
+      "published_at": ""
+    },
+    {
+      "paper_id": "note-c-ms-003",
+      "path": "tests\\fixtures\\source_routing\\sample_c_gap_fill_priority\\notes\\research\\papers\\note-c-ms-003.md",
+      "title": "note-c-ms-003",
+      "topics": [],
+      "bucket_topics": [
+        "general_llm"
+      ],
+      "knowledge_slots": [
+        "general_llm"
+      ],
+      "status": "",
+      "importance": "",
+      "follow_up": "",
+      "source": "",
+      "authors": [],
+      "source_type": "papers",
+      "evidence_strength": "strong_knowledge",
+      "summary": "",
+      "modified_at": "2026-03-12T00:00:00Z",
+      "published_at": ""
+    },
+    {
+      "paper_id": "note-c-ms-004",
+      "path": "tests\\fixtures\\source_routing\\sample_c_gap_fill_priority\\notes\\research\\papers\\note-c-ms-004.md",
+      "title": "note-c-ms-004",
+      "topics": [],
+      "bucket_topics": [
+        "general_llm"
+      ],
+      "knowledge_slots": [
+        "general_llm"
+      ],
+      "status": "",
+      "importance": "",
+      "follow_up": "",
+      "source": "",
+      "authors": [],
+      "source_type": "papers",
+      "evidence_strength": "strong_knowledge",
+      "summary": "",
+      "modified_at": "2026-03-12T00:00:00Z",
+      "published_at": ""
+    }
+  ],
+  "topic_frequency": {},
+  "bucket_frequency": {
+    "general_llm": 5
+  },
+  "slot_frequency": {
+    "general_llm": 5
+  },
+  "strong_topic_frequency": {},
+  "strong_bucket_frequency": {
+    "general_llm": 5
+  },
+  "strong_slot_frequency": {
+    "general_llm": 5
+  },
+  "weak_topic_frequency": {},
+  "recent_topic_frequency": {},
+  "recent_records": []
+}

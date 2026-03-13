@@ -1,0 +1,30 @@
+{
+  "run_id": "run-sr-e",
+  "profile_id": "llm_systems",
+  "started_at": "2026-03-12T00:00:00Z",
+  "updated_at": "2026-03-12T00:00:00Z",
+  "stage": "source-intake",
+  "source_counts": {
+    "arxiv": 4,
+    "semantic_scholar": 3
+  },
+  "source_status": {
+    "arxiv": {
+      "status": "ok",
+      "candidate_count": 4
+    },
+    "semantic_scholar": {
+      "status": "ok",
+      "candidate_count": 3
+    }
+  },
+  "warnings": [],
+  "source_pools": {
+    "fresh_pool_count": 4,
+    "hot_pool_count": 3,
+    "candidate_pool_count": 7
+  },
+  "candidate_count": 7,
+  "status": "completed",
+  "artifacts": []
+}

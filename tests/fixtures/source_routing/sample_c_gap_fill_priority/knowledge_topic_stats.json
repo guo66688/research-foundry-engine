@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-03-12T00:00:00Z",
+  "topic_frequency": {},
+  "bucket_frequency": {
+    "general_llm": 5
+  },
+  "slot_frequency": {
+    "general_llm": 5
+  },
+  "strong_topic_frequency": {},
+  "strong_bucket_frequency": {
+    "general_llm": 5
+  },
+  "strong_slot_frequency": {
+    "general_llm": 5
+  },
+  "weak_topic_frequency": {},
+  "recent_topic_frequency": {}
+}

@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-03-12T00:00:00Z",
+  "stats": {
+    "note_count": 1,
+    "paper_count": 1,
+    "strong_note_count": 1,
+    "weak_note_count": 0
+  },
+  "paper_ids": [
+    "note-d-agent-001"
+  ],
+  "records": [
+    {
+      "paper_id": "note-d-agent-001",
+      "path": "tests\\fixtures\\source_routing\\sample_d_cross_source_dedupe\\notes\\research\\papers\\note-d-agent-001.md",
+      "title": "note-d-agent-001",
+      "topics": [],
+      "bucket_topics": [
+        "general_llm"
+      ],
+      "knowledge_slots": [
+        "general_llm"
+      ],
+      "status": "",
+      "importance": "",
+      "follow_up": "",
+      "source": "",
+      "authors": [],
+      "source_type": "papers",
+      "evidence_strength": "strong_knowledge",
+      "summary": "",
+      "modified_at": "2026-03-12T00:00:00Z",
+      "published_at": ""
+    }
+  ],
+  "topic_frequency": {},
+  "bucket_frequency": {
+    "general_llm": 1
+  },
+  "slot_frequency": {
+    "general_llm": 1
+  },
+  "strong_topic_frequency": {},
+  "strong_bucket_frequency": {
+    "general_llm": 1
+  },
+  "strong_slot_frequency": {
+    "general_llm": 1
+  },
+  "weak_topic_frequency": {},
+  "recent_topic_frequency": {},
+  "recent_records": []
+}

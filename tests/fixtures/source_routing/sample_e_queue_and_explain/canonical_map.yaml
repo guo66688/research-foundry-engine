@@ -1,0 +1,9 @@
+﻿topics:
+  evaluation:
+    canonical_papers:
+      - title: "HELM"
+      - title: "Holistic Evaluation of Language Models"
+  model_systems:
+    canonical_papers:
+      - title: "Speculative Decoding"
+      - title: "PagedAttention"

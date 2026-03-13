@@ -1,0 +1,46 @@
+﻿{
+  "profiles": [
+    {
+      "profile_id": "llm_systems",
+      "include_terms": [
+        "large language model",
+        "inference",
+        "agent",
+        "alignment",
+        "evaluation",
+        "benchmark"
+      ],
+      "exclude_terms": ["survey", "workshop"],
+      "priority": 5,
+      "max_candidates": 50,
+      "source_scope": ["arxiv", "semantic_scholar"],
+      "scoring_overrides": {
+        "topical_fit": 0.35,
+        "knowledge_gain": 0.22
+      },
+      "reading_preferences": {
+        "prefer_depth_over_breadth": true,
+        "tolerate_revisit": true,
+        "prefer_systems_papers": true
+      },
+      "knowledge_map": {
+        "model_systems": {
+          "status": "weak",
+          "topics": ["inference serving", "kv cache", "batching", "speculative decoding"]
+        },
+        "agent_systems": {
+          "status": "learning",
+          "topics": ["agent", "planning", "tool use", "memory", "multi-agent"]
+        },
+        "alignment": {
+          "status": "known",
+          "topics": ["alignment", "reward modeling", "preference optimization", "constitutional"]
+        },
+        "evaluation": {
+          "status": "blind_spot",
+          "topics": ["benchmark", "evaluation", "robustness", "failure analysis", "hallucination"]
+        }
+      }
+    }
+  ]
+}

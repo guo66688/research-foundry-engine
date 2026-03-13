@@ -1,0 +1,25 @@
+﻿{
+  "must_read_sources": ["arxiv"],
+  "trend_watch_min_semantic_scholar": 1,
+  "gap_fill_max_semantic_scholar": 1,
+  "forbidden_must_read_sources": ["semantic_scholar"],
+  "required_explain_fields": [
+    "source",
+    "source_role",
+    "bucket_routing_reason",
+    "source_selection_reason"
+  ],
+  "required_daily_context_fields": [
+    "source_pools",
+    "source_mix_summary",
+    "queue_summary",
+    "queue_decisions",
+    "must_read",
+    "trend_watch",
+    "gap_fill",
+    "review_or_backfill",
+    "deepread_picks"
+  ],
+  "review_or_backfill_min": 1,
+  "validate_today": true
+}

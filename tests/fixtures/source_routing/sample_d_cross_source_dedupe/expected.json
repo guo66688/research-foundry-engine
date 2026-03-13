@@ -1,0 +1,17 @@
+﻿{
+  "must_read_sources": ["arxiv"],
+  "trend_watch_min_semantic_scholar": 0,
+  "gap_fill_max_semantic_scholar": 1,
+  "forbidden_must_read_sources": ["semantic_scholar"],
+  "required_explain_fields": [
+    "source",
+    "source_role",
+    "bucket_routing_reason",
+    "source_selection_reason"
+  ],
+  "validate_source_dedupe": true,
+  "dedupe_expectations": [
+    {"paper_id": "2401.03001", "expected_source": "arxiv", "max_count": 1}
+  ],
+  "validate_today": false
+}

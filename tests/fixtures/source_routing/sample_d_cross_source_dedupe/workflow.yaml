@@ -1,0 +1,72 @@
+﻿workspace:
+  notes_root: "tests/fixtures/source_routing/sample_d_cross_source_dedupe/notes"
+
+sources:
+  arxiv:
+    enabled: true
+    role: ["fresh_discovery"]
+    preferred_buckets: ["must_read", "trend_watch", "gap_fill"]
+  semantic_scholar:
+    enabled: true
+    role: ["trend_support", "hot_backfill"]
+    preferred_buckets: ["trend_watch", "gap_fill"]
+    restricted_buckets: ["must_read"]
+
+bucket_strategy:
+  must_read:
+    prefer_sources: ["arxiv"]
+    max_semantic_scholar_items: 0
+  trend_watch:
+    prefer_sources: ["arxiv", "semantic_scholar"]
+    target_mix:
+      arxiv: 0.5
+      semantic_scholar: 0.5
+  gap_fill:
+    prefer_sources: ["arxiv", "semantic_scholar"]
+    max_semantic_scholar_items: 1
+  review_or_backfill:
+    prefer_sources: ["local_inventory", "canonical_map"]
+
+triage:
+  scoring:
+    weights:
+      topical_fit: 0.28
+      impact: 0.18
+      recency: 0.12
+      method_signal: 0.12
+      knowledge_gain: 0.18
+      bridge_value: 0.07
+      actionability: 0.05
+      redundancy_penalty: 0.10
+  shortlist:
+    total: 4
+    must_read: 1
+    trend_watch: 2
+    gap_fill: 1
+  deepread:
+    must_read_top2: 1
+    gap_fill_top1: 1
+  diversity:
+    max_per_bucket: {}
+    min_per_bucket: {}
+  inventory:
+    enable_daily_recommendations: false
+    recent_window_days: 90
+  feedback:
+    enabled: false
+  queue:
+    enabled: false
+  revisit:
+    enabled: false
+  backfill:
+    enabled: false
+  adaptation:
+    enabled: false
+
+runtime:
+  cache_dir: "tests/fixtures/source_routing/sample_d_cross_source_dedupe/runtime/cache"
+  run_dir: "tests/fixtures/source_routing/sample_d_cross_source_dedupe/runtime/runs"
+  artifact_dir: "tests/fixtures/source_routing/sample_d_cross_source_dedupe/runtime/artifacts"
+  log_dir: "tests/fixtures/source_routing/sample_d_cross_source_dedupe/runtime/logs"
+  log_level: "INFO"
+  dedupe_strategy: "paper_id_then_title"

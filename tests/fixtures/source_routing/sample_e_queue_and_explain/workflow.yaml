@@ -1,0 +1,79 @@
+﻿workspace:
+  notes_root: "tests/fixtures/source_routing/sample_e_queue_and_explain/notes"
+
+sources:
+  arxiv:
+    enabled: true
+    role: ["fresh_discovery"]
+    preferred_buckets: ["must_read", "trend_watch", "gap_fill"]
+  semantic_scholar:
+    enabled: true
+    role: ["trend_support", "hot_backfill"]
+    preferred_buckets: ["trend_watch", "gap_fill"]
+    restricted_buckets: ["must_read"]
+
+bucket_strategy:
+  must_read:
+    prefer_sources: ["arxiv"]
+    max_semantic_scholar_items: 0
+  trend_watch:
+    prefer_sources: ["arxiv", "semantic_scholar"]
+    target_mix:
+      arxiv: 0.5
+      semantic_scholar: 0.5
+  gap_fill:
+    prefer_sources: ["arxiv", "semantic_scholar"]
+    max_semantic_scholar_items: 1
+  review_or_backfill:
+    prefer_sources: ["local_inventory", "canonical_map"]
+
+triage:
+  scoring:
+    weights:
+      topical_fit: 0.28
+      impact: 0.18
+      recency: 0.12
+      method_signal: 0.12
+      knowledge_gain: 0.18
+      bridge_value: 0.07
+      actionability: 0.05
+      redundancy_penalty: 0.10
+  shortlist:
+    total: 6
+    must_read: 2
+    trend_watch: 2
+    gap_fill: 2
+  deepread:
+    must_read_top2: 2
+    gap_fill_top1: 1
+  diversity:
+    max_per_bucket: {}
+    min_per_bucket: {}
+  inventory:
+    enable_daily_recommendations: false
+    recent_window_days: 90
+  feedback:
+    enabled: false
+  queue:
+    enabled: true
+    max_active_items: 30
+    max_daily_review_or_backfill: 2
+    demote_after_ignored_runs: 3
+  revisit:
+    enabled: true
+    max_daily_items: 2
+    prefer_recently_referenced: true
+  backfill:
+    enabled: true
+    canonical_map: "tests/fixtures/source_routing/sample_e_queue_and_explain/canonical_map.yaml"
+    max_daily_items: 1
+  adaptation:
+    enabled: false
+
+runtime:
+  cache_dir: "tests/fixtures/source_routing/sample_e_queue_and_explain/runtime/cache"
+  run_dir: "tests/fixtures/source_routing/sample_e_queue_and_explain/runtime/runs"
+  artifact_dir: "tests/fixtures/source_routing/sample_e_queue_and_explain/runtime/artifacts"
+  log_dir: "tests/fixtures/source_routing/sample_e_queue_and_explain/runtime/logs"
+  log_level: "INFO"
+  dedupe_strategy: "paper_id_then_title"
