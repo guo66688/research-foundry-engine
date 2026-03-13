@@ -145,3 +145,9 @@ Research Foundry 现在分成四层，而不是只有 phase scripts。
 - 不把 arXiv 与 Semantic Scholar 直接混成单一候选池做统一排序。
 - 不通过一个 `source_weight` 粗暴修正；而是先评分、后路由。
 - `review_or_backfill` 继续由本地知识库存与 canonical/revisit 规划主导。
+
+## 离线回放架构
+
+- fixtures 提供稳定输入（pools、profile、workflow、notes）。
+- 回放脚本调用 triage CLI 与 today 编排函数，不接触在线 API。
+- 断言脚本输出 bucket/source mix，并定位来源限制或 explain 缺失。

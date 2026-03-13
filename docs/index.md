@@ -44,3 +44,8 @@
 ## 2026-03 新增文档
 
 - [source-routing.md](source-routing.md): 来源角色化、分池与分桶路由设计。
+
+- [design.md](design.md)：离线回放与 source-routing 回归设计
+- [system.md](system.md)：离线回放系统视角
+- [modules.md](modules.md)：source-routing 相关模块清单
+- [incidents.md](incidents.md)：事故回放与回归流程

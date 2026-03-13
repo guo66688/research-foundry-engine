@@ -143,3 +143,9 @@ python scripts/registry/flow_registry_update.py --help
 - `source_role`
 - `bucket_routing_reason`
 - `source_selection_reason`
+
+## 离线回放运行目录
+
+- fixtures 使用独立 runtime：`tests/fixtures/source_routing/<sample>/runtime/*`。
+- triage 产物：`triage_result.json`、`triage_explanations-<run_id>.json`。
+- today 产物：`daily_context-<run_id>.json`、`queue_decisions-<run_id>.json`。

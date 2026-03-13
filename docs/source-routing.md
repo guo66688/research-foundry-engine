@@ -42,3 +42,20 @@
 
 - 为什么某篇 S2 进入 `trend_watch`；
 - 为什么它不能进入 `must_read`。
+
+## 离线回放与回归样本
+
+- fixtures 目录：`tests/fixtures/source_routing/`。
+- 每个样本包含：`fresh_pool.jsonl`、`hot_pool.jsonl`、`candidate_pool.jsonl`、`profile.json`、`workflow.yaml`、`knowledge_inventory.json`、`expected.json`。
+- 样本覆盖：A(arXiv-only)、B(arXiv+S2 trend)、C(gap_fill)、D(cross-source dedupe)、E(today 编排)。
+
+**验收要点**
+- must_read 不得出现 `semantic_scholar`。
+- trend_watch 至少包含 1 篇 S2（样本 B/E）。
+- gap_fill 需命中 blind_spot/weak（样本 C）。
+- cross-source dedupe 保留 arXiv（样本 D）。
+- daily_context 字段完整（样本 E）。
+
+**运行方式**
+- 回放：`python scripts/tooling/run_source_routing_fixture.py`。
+- 验证：`python scripts/tooling/validate_source_routing_fixture.py`。
